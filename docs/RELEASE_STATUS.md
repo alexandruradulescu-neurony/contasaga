@@ -10,8 +10,8 @@ backup/restore și aprobările enumerate în `RELEASE_READINESS.md`.
 
 ## Dovezi automate
 
-- 99/99 teste Django/pytest;
-- 84/84 verificări PostgreSQL/RLS pe topologia cu owner non-superuser;
+- 107/107 teste Django/pytest pe ramura `dev`;
+- 94/94 verificări PostgreSQL/RLS pe topologia cu owner non-superuser;
 - `ruff check` și `ruff format --check` fără erori;
 - nicio migrare model lipsă și nicio migrare neaplicată;
 - rolurile locale sunt corecte: `web_app` fără BYPASSRLS, `worker` cu
@@ -61,6 +61,13 @@ Cele trei documente QA care aveau obiecte locale absente au fost retrase logic,
 cu audit păstrat. Toate cozile operaționale raportate de readiness sunt acum
 zero; avertismentele rămase în dezvoltare sunt exclusiv setările HTTP locale
 intenționat nesecurizate, nu blocaje de date.
+
+Faza 1 a inboxului lunar pentru încărcare în masă este implementată și testată
+pe `dev`: loturi de maximum 500 de fișiere, upload concurent cu retry, staging
+în `_temp`, verificare de tip/checksum, publicare în `inbox`, audit, RLS și
+curățare zilnică. Testele sintetice de browser au fost șterse după validare, iar
+cozile locale au rămas curate. Schimbarea nu este încă în `main` și nu este încă
+prezentă pe instanța Railway live.
 
 ## Porți externe
 

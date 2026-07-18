@@ -27,3 +27,27 @@ def cheie_thumbnail(
 ) -> str:
     prefix = prefix_lunar(firma_id=firma_id, an=an, luna=luna)
     return f"{prefix}/thumbnails/{fisier_id}.png"
+
+
+def cheie_temporara_inbox(
+    *,
+    firma_id: UUID | str,
+    an: int,
+    luna: int,
+    lot_id: UUID | str,
+    fisier_id: UUID | str,
+) -> str:
+    prefix = prefix_lunar(firma_id=firma_id, an=an, luna=luna)
+    return f"{prefix}/_temp/{lot_id}/{fisier_id}.part"
+
+
+def cheie_original_inbox(
+    *,
+    firma_id: UUID | str,
+    an: int,
+    luna: int,
+    lot_id: UUID | str,
+    fisier_id: UUID | str,
+) -> str:
+    prefix = prefix_lunar(firma_id=firma_id, an=an, luna=luna)
+    return f"{prefix}/inbox/{lot_id}/originals/{fisier_id}"

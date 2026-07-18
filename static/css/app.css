@@ -347,6 +347,21 @@ input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--brand); 
 .upload-result--error { background: var(--danger-bg); color: var(--danger); }
 .upload-result a { flex: 0 0 auto; color: inherit; font-weight: 800; }
 
+.inbox-dropzone { display: grid; min-height: 190px; border: 2px dashed var(--border-strong); border-radius: var(--radius); background: #fff; padding: 1.5rem; text-align: center; place-items: center; align-content: center; gap: .35rem; cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+.inbox-dropzone:hover, .inbox-dropzone:focus-visible, .inbox-dropzone--active { border-color: var(--brand); background: var(--surface-green); outline: 0; }
+.inbox-dropzone strong { font-size: 1.1rem; }
+.inbox-dropzone span { margin-bottom: .65rem; color: var(--muted); font-size: .86rem; }
+.inbox-upload-options { display: flex; margin: .65rem 0 1rem; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .65rem; color: var(--muted); font-size: .78rem; }
+.inbox-selection { margin: 1rem 0; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; padding: .9rem; }
+.inbox-selection ul { max-height: 220px; margin: .65rem 0 0; padding-left: 1.15rem; overflow: auto; color: var(--muted); font-size: .8rem; }
+.inbox-batch-list { display: grid; gap: .85rem; }
+.inbox-batch { border: 1px solid var(--border); border-radius: var(--radius); background: #fff; padding: 1rem; }
+.inbox-batch__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.inbox-batch__header h3 { margin-bottom: .15rem; }
+.inbox-batch__header p, .inbox-batch__note { margin-bottom: 0; color: var(--muted); font-size: .82rem; }
+.inbox-batch__note { margin-top: .7rem; border-left: 3px solid var(--border-strong); padding-left: .7rem; }
+.inbox-batch details.disclosure { margin-top: .55rem; }
+
 .empty-state { padding: 2.5rem 1rem; text-align: center; }
 .empty-state__icon { display: grid; width: 44px; height: 44px; margin: 0 auto .8rem; border-radius: 13px; background: var(--surface-green); color: var(--brand); place-items: center; font-size: 1.2rem; font-weight: 900; }
 .empty-state h2 { margin-bottom: .35rem; }
@@ -368,6 +383,7 @@ input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--brand); 
 .file-row:last-child { border-bottom: 0; }
 .file-row__name { margin: 0 0 .15rem; font-weight: 750; }
 .file-row__meta { margin: 0; color: var(--muted); font-size: .8rem; }
+.file-row__actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: .5rem; }
 
 .handoff-list { display: grid; gap: .85rem; }
 .handoff-card { border: 1px solid var(--border); border-radius: var(--radius); background: #fff; padding: 1rem; }
@@ -443,6 +459,7 @@ details.disclosure__box { padding: 0 0 1rem; }
     .upload-mode__grid { grid-template-columns: 1fr; }
     .choice-card { min-height: auto; }
     .handoff-card__header { align-items: stretch; flex-direction: column; }
+    .inbox-batch__header { align-items: stretch; flex-direction: column; }
     .filter-bar, .form-grid { grid-template-columns: 1fr; }
     .auth-shell { grid-template-columns: 1fr; }
     .auth-aside { display: none; }

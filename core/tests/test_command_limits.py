@@ -1,6 +1,9 @@
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase
 
+from documente.management.commands.cleanup_inbox_uploads import (
+    Command as CleanupInboxUploadsCommand,
+)
 from documente.management.commands.cleanup_upload_intents import (
     Command as CleanupUploadIntentsCommand,
 )
@@ -19,6 +22,7 @@ class CommandLimitTests(SimpleTestCase):
     def test_batch_commands_reject_non_positive_limits_before_doing_work(self):
         commands = (
             CleanupUploadIntentsCommand,
+            CleanupInboxUploadsCommand,
             ProcessDocumentFilesCommand,
             CleanupExpiredExportsCommand,
             RetryNotificationEmailsCommand,

@@ -15,4 +15,5 @@ class Command(BaseCommand):
             call_command("process_exports", limit=20, stdout=self.stdout)
         else:
             call_command("cleanup_upload_intents", limit=1000, stdout=self.stdout)
+            call_command("cleanup_inbox_uploads", limit=1000, stdout=self.stdout)
             call_command("cleanup_expired_exports", limit=100, stdout=self.stdout)

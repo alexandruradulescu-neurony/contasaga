@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% load ux %}
+
+{% block title %}Inbox documente · {{ perioada.luna|luna_nume }} {{ perioada.an }}{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb" aria-label="Navigație secundară">
+    <a href="{% url 'dashboard' %}">Acasă</a><span aria-hidden="true">/</span>
+    <a href="{% url 'perioada_detaliu' perioada.id %}">{{ perioada.firma.denumire }} · {{ perioada.luna|luna_nume }} {{ perioada.an }}</a><span aria-hidden="true">/</span>
+    <span>Inbox documente</span>
+</nav>
+
+<header class="page-header">
+    <div class="page-header__copy">
+        <p class="eyebrow">Încărcare multiplă</p>
+        <h1>Trimite documentele lunii într-un singur lot</h1>
+        <p class="lede">Fișierele ajung necategorizate în inboxul contabilului. Originalele sunt păstrate separat și pot fi clasificate ulterior.</p>
+    </div>
+    <div class="page-header__actions">
+        <a class="btn btn--secondary" href="{% url 'perioada_detaliu' perioada.id %}">Înapoi la dosar</a>
+    </div>
+</header>
+
+{% if poate_incarca %}
+<section class="panel panel--accent">
+    <div class="panel-header">
+        <div><p class="eyebrow">Lot nou</p><h2>Selectează toate fișierele</h2></div>
+        <span class="status status--in_lucru">Maximum {{ max_fisiere }}</span>
+    </div>
+    <form
+        id="inbox-upload-form"
+        data-create-url="{% url 'inbox_lot_creare' perioada.id %}"
+        novalidate
+    >
+        {% csrf_token %}
+        <div id="inbox-dropzone" class="inbox-dropzone" tabindex="0" role="button" aria-controls="inbox-files">
+            <strong>Trage aici documentele</strong>
+            <span>sau selectează fișierele de pe calculator</span>
+            <input id="inbox-files" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.heic,.heif,application/pdf,image/jpeg,image/png,image/heic,image/heif" hidden>
+            <button id="inbox-select-files" class="btn btn--secondary btn--small" type="button">Selectează fișiere</button>
+        </div>
+        <div class="inbox-upload-options">
+            <button id="inbox-select-folder" class="btn btn--ghost btn--small" type="button">Selectează un folder</button>
+            <input id="inbox-folder" type="file" webkitdirectory multiple hidden>
+            <span>PDF, JPG, PNG sau HEIC · {{ max_mb_fisier }} MB/fișier · {{ max_gb_lot }} GB/lot</span>
+        </div>
+        <label for="inbox-note">Notă pentru contabil <span class="muted">(opțional)</span></label>
+        <textarea id="inbox-note" maxlength="2000" placeholder="Exemplu: toate documentele primite până la 15 septembrie"></textarea>
+
+        <div id="inbox-selection" class="inbox-selection" hidden>
+            <div class="progress-meta"><span>Selecție</span><strong id="inbox-selection-summary"></strong></div>
+            <ul id="inbox-selection-list"></ul>
+        </div>
+        <div id="inbox-progress-wrap" class="upload-progress" hidden>
+            <div class="progress-meta"><span>Progresul lotului</span><strong id="inbox-progress-label">0/0</strong></div>
+            <progress id="inbox-progress" value="0" max="1"></progress>
+            <p id="inbox-upload-status" class="muted text-small" aria-live="polite"></p>
+        </div>
+        <div class="form-actions">
+            <button id="inbox-upload-submit" type="submit" disabled>Încarcă lotul</button>
+        </div>
+        <div id="inbox-results" class="upload-results" hidden>
+            <p id="inbox-results-title" class="upload-results__title"></p>
+            <ul id="inbox-results-list"></ul>
+            <a class="btn btn--secondary btn--small" href="{% url 'inbox_perioada' perioada.id %}">Reîncarcă inboxul</a>
+        </div>
+    </form>
+</section>
+{% else %}
+<section class="next-step"><div><p class="next-step__title">Încărcarea este indisponibilă</p><p class="next-step__text">Perioada este închisă sau rolul tău nu permite încărcarea documentelor.</p></div></section>
+{% endif %}
+
+<section class="panel">
+    <div class="panel-header">
+        <div><p class="eyebrow">Trasabilitate</p><h2>Loturile acestei luni · {{ loturi|length }}</h2></div>
+    </div>
+    {% if loturi %}
+        <div class="inbox-batch-list">
+            {% for lot in loturi %}
+                <article class="inbox-batch">
+                    <div class="inbox-batch__header">
+                        <div>
+                            <h3>Lot din {{ lot.creat_la|date:"j F Y, H:i" }}</h3>
+                            <p>{{ lot.numar_disponibile }}/{{ lot.numar_fisiere_declarat }} fișiere disponibile{% if lot.numar_erori %} · {{ lot.numar_erori }} cu eroare{% endif %}</p>
+                        </div>
+                        <span class="status status--{{ lot.status }}">{{ lot.get_status_display }}</span>
+                    </div>
+                    {% if lot.nota %}<p class="inbox-batch__note">{{ lot.nota }}</p>{% endif %}
+                    <details class="disclosure">
+                        <summary>Vezi fișierele · {{ lot.fisiere_afisate|length }}</summary>
+                        <div class="disclosure__box">
+                            {% for fisier in lot.fisiere_afisate %}
+                                <div class="file-row">
+                                    <div><p class="file-row__name">{{ fisier.nume_original }}</p><p class="file-row__meta">{{ fisier.dimensiune_bytes|default:fisier.dimensiune_declarata|filesizeformat }}{% if fisier.eroare %} · <span class="text-danger">{{ fisier.eroare }}</span>{% endif %}</p></div>
+                                    <div class="file-row__actions">
+                                        {% if fisier.status == "disponibil" or fisier.status == "clasificat" %}<a class="btn btn--ghost btn--small" href="{% url 'inbox_fisier_descarcare' fisier.id %}">Descarcă originalul</a>{% endif %}
+                                        <span class="status status--{{ fisier.status }}">{{ fisier.get_status_display }}</span>
+                                    </div>
+                                </div>
+                            {% empty %}<p class="muted text-small">Lotul nu are încă poziții inițiate.</p>{% endfor %}
+                        </div>
+                    </details>
+                </article>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="empty-state"><span class="empty-state__icon">↑</span><h2>Niciun lot încărcat</h2><p>Primul lot va apărea aici împreună cu rezultatul fiecărui fișier.</p></div>
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+{% if poate_incarca %}
+<script>
+(() => {
+    const form = document.getElementById("inbox-upload-form");
+    const fileInput = document.getElementById("inbox-files");
+    const folderInput = document.getElementById("inbox-folder");
+    const dropzone = document.getElementById("inbox-dropzone");
+    const submit = document.getElementById("inbox-upload-submit");
+    const selection = document.getElementById("inbox-selection");
+    const selectionSummary = document.getElementById("inbox-selection-summary");
+    const selectionList = document.getElementById("inbox-selection-list");
+    const progressWrap = document.getElementById("inbox-progress-wrap");
+    const progress = document.getElementById("inbox-progress");
+    const progressLabel = document.getElementById("inbox-progress-label");
+    const status = document.getElementById("inbox-upload-status");
+    const results = document.getElementById("inbox-results");
+    const resultsTitle = document.getElementById("inbox-results-title");
+    const resultsList = document.getElementById("inbox-results-list");
+    const csrf = form.querySelector("input[name=csrfmiddlewaretoken]").value;
+    const maxFiles = {{ max_fisiere }};
+    const maxBytes = {{ max_mb_fisier }} * 1024 * 1024;
+    const maxBatchBytes = {{ max_gb_lot }} * 1024 * 1024 * 1024;
+    let selectedFiles = [];
+
+    const formatBytes = (bytes) => {
+        if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${bytes} B`;
+    };
+
+    const jsonOrError = async (response) => {
+        if (response.status === 204) return {};
+        let payload = {};
+        try { payload = await response.json(); } catch (_) { /* response without JSON */ }
+        if (!response.ok) throw new Error(payload.error || "Operația nu a putut fi finalizată.");
+        return payload;
+    };
+
+    const postForm = async (url, values = {}) => {
+        const body = new FormData();
+        Object.entries(values).forEach(([key, value]) => body.append(key, value));
+        return jsonOrError(await fetch(url, {
+            method: "POST",
+            headers: {"X-CSRFToken": csrf},
+            body,
+        }));
+    };
+
+    const setFiles = (files) => {
+        selectedFiles = Array.from(files).filter((file) => file.size > 0);
+        const total = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+        selection.hidden = !selectedFiles.length;
+        submit.disabled = !selectedFiles.length || selectedFiles.length > maxFiles || total > maxBatchBytes || selectedFiles.some((file) => file.size > maxBytes);
+        selectionSummary.textContent = `${selectedFiles.length} fișiere · ${formatBytes(total)}`;
+        selectionList.replaceChildren(...selectedFiles.slice(0, 20).map((file) => {
+            const item = document.createElement("li");
+            item.textContent = `${file.webkitRelativePath || file.name} · ${formatBytes(file.size)}`;
+            if (file.size > maxBytes) item.className = "text-danger";
+            return item;
+        }));
+        if (selectedFiles.length > 20) {
+            const item = document.createElement("li");
+            item.textContent = `… și încă ${selectedFiles.length - 20} fișiere`;
+            selectionList.append(item);
+        }
+        if (selectedFiles.length > maxFiles) selectionSummary.textContent += ` · maximum ${maxFiles}`;
+        if (total > maxBatchBytes) selectionSummary.textContent += " · lotul depășește limita";
+    };
+
+    document.getElementById("inbox-select-files").addEventListener("click", () => fileInput.click());
+    document.getElementById("inbox-select-folder").addEventListener("click", () => folderInput.click());
+    fileInput.addEventListener("change", () => setFiles(fileInput.files));
+    folderInput.addEventListener("change", () => setFiles(folderInput.files));
+    dropzone.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); fileInput.click(); }
+    });
+    ["dragenter", "dragover"].forEach((name) => dropzone.addEventListener(name, (event) => {
+        event.preventDefault(); dropzone.classList.add("inbox-dropzone--active");
+    }));
+    ["dragleave", "drop"].forEach((name) => dropzone.addEventListener(name, (event) => {
+        event.preventDefault(); dropzone.classList.remove("inbox-dropzone--active");
+    }));
+    dropzone.addEventListener("drop", (event) => setFiles(event.dataTransfer.files));
+
+    const appendResult = (file, ok, message) => {
+        const item = document.createElement("li");
+        item.className = `upload-result upload-result--${ok ? "success" : "error"}`;
+        const name = document.createElement("span");
+        name.textContent = file.name;
+        const detail = document.createElement("span");
+        detail.textContent = message;
+        item.append(name, detail);
+        resultsList.append(item);
+    };
+
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!selectedFiles.length || submit.disabled) return;
+        submit.disabled = true;
+        fileInput.disabled = true;
+        folderInput.disabled = true;
+        resultsList.replaceChildren();
+        results.hidden = true;
+        progressWrap.hidden = false;
+        progress.max = selectedFiles.length;
+        progress.value = 0;
+        progressLabel.textContent = `0/${selectedFiles.length}`;
+        let lot;
+        let completed = 0;
+        let success = 0;
+
+        try {
+            const total = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+            status.textContent = "Pregătesc lotul și spațiul temporar.";
+            lot = await postForm(form.dataset.createUrl, {
+                numar_fisiere: selectedFiles.length,
+                dimensiune_totala: total,
+                nota: document.getElementById("inbox-note").value,
+            });
+
+            let cursor = 0;
+            const worker = async () => {
+                while (cursor < selectedFiles.length) {
+                    const index = cursor++;
+                    const file = selectedFiles[index];
+                    try {
+                        status.textContent = `Încarc ${file.name}`;
+                        const target = await postForm(lot.init_url, {
+                            nume: file.name,
+                            content_type: file.type || "application/octet-stream",
+                            dimensiune: file.size,
+                        });
+                        let uploadError;
+                        for (let attempt = 1; attempt <= 2; attempt += 1) {
+                            try {
+                                await jsonOrError(await fetch(target.upload_url, {
+                                    method: target.method,
+                                    headers: target.headers,
+                                    body: file,
+                                }));
+                                uploadError = null;
+                                break;
+                            } catch (error) {
+                                uploadError = error;
+                            }
+                        }
+                        if (uploadError) throw uploadError;
+
+                        let finalizeError;
+                        for (let attempt = 1; attempt <= 2; attempt += 1) {
+                            try {
+                                await postForm(target.finalize_url);
+                                finalizeError = null;
+                                break;
+                            } catch (error) {
+                                finalizeError = error;
+                            }
+                        }
+                        if (finalizeError) throw finalizeError;
+                        success += 1;
+                        appendResult(file, true, "Încărcat");
+                    } catch (error) {
+                        appendResult(file, false, error.message);
+                    } finally {
+                        completed += 1;
+                        progress.value = completed;
+                        progressLabel.textContent = `${completed}/${selectedFiles.length}`;
+                    }
+                }
+            };
+            await Promise.all(Array.from({length: Math.min(3, selectedFiles.length)}, worker));
+            const finalLot = await postForm(lot.finalize_url);
+            results.hidden = false;
+            resultsTitle.textContent = `${success} din ${selectedFiles.length} fișiere au ajuns în inbox · ${finalLot.status === "finalizat" ? "lot finalizat" : "lot parțial"}`;
+            status.textContent = "Lotul a fost înregistrat. Fișierele reușite sunt disponibile contabilului.";
+        } catch (error) {
+            results.hidden = false;
+            resultsTitle.textContent = "Lotul nu a putut fi creat.";
+            status.textContent = error.message;
+        }
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

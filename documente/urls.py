@@ -1,5 +1,14 @@
 from django.urls import path
 
+from .inbox_views import (
+    inbox_fisier_descarcare,
+    inbox_fisier_finalizare,
+    inbox_fisier_initiere,
+    inbox_lot_creare,
+    inbox_lot_finalizare,
+    inbox_perioada,
+    inbox_upload_local_put,
+)
 from .views import (
     document_acceptare,
     document_anulare,
@@ -29,6 +38,41 @@ from .views import (
 
 urlpatterns = [
     path("verificare/", verificare_documente, name="verificare_documente"),
+    path(
+        "perioade/<uuid:perioada_id>/inbox/",
+        inbox_perioada,
+        name="inbox_perioada",
+    ),
+    path(
+        "perioade/<uuid:perioada_id>/inbox/loturi/",
+        inbox_lot_creare,
+        name="inbox_lot_creare",
+    ),
+    path(
+        "inbox/loturi/<uuid:lot_id>/fisiere/initiaza/",
+        inbox_fisier_initiere,
+        name="inbox_fisier_initiere",
+    ),
+    path(
+        "inbox/fisiere/<uuid:fisier_id>/local/",
+        inbox_upload_local_put,
+        name="inbox_upload_local_put",
+    ),
+    path(
+        "inbox/fisiere/<uuid:fisier_id>/finalizeaza/",
+        inbox_fisier_finalizare,
+        name="inbox_fisier_finalizare",
+    ),
+    path(
+        "inbox/fisiere/<uuid:fisier_id>/descarca/",
+        inbox_fisier_descarcare,
+        name="inbox_fisier_descarcare",
+    ),
+    path(
+        "inbox/loturi/<uuid:lot_id>/finalizeaza/",
+        inbox_lot_finalizare,
+        name="inbox_lot_finalizare",
+    ),
     path("perioade/<uuid:perioada_id>/documente/noi/", document_nou, name="document_nou"),
     path("documente/<uuid:document_id>/", document_detaliu, name="document_detaliu"),
     path(

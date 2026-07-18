@@ -2,7 +2,14 @@ from django.contrib import admin
 
 from config.admin_site import platform_admin_site
 
-from .models import Comentariu, Document, FisierDocument, IntentieUpload
+from .models import (
+    Comentariu,
+    Document,
+    FisierDocument,
+    FisierInbox,
+    IntentieUpload,
+    LotIncarcare,
+)
 
 
 class DocumentAdmin(admin.ModelAdmin):
@@ -36,7 +43,74 @@ class IntentieUploadAdmin(admin.ModelAdmin):
     readonly_fields = ("storage_key", "expira_la", "folosita_la", "creat_la")
 
 
+class LotIncarcareAdmin(admin.ModelAdmin):
+    list_display = (
+        "creat_la",
+        "firma",
+        "perioada_contabila",
+        "status",
+        "numar_fisiere_declarat",
+        "creat_de",
+    )
+    list_filter = ("status",)
+    readonly_fields = (
+        "firma",
+        "perioada_contabila",
+        "creat_de",
+        "status",
+        "numar_fisiere_declarat",
+        "dimensiune_totala_declarata",
+        "nota",
+        "finalizat_la",
+        "creat_la",
+        "actualizat_la",
+    )
+
+    def has_add_permission(self, request) -> bool:
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:
+        return False
+
+    def has_delete_permission(self, request, obj=None) -> bool:
+        return False
+
+
+class FisierInboxAdmin(admin.ModelAdmin):
+    list_display = ("nume_original", "lot", "status", "dimensiune_bytes", "incarcat_la")
+    list_filter = ("status", "mime_type")
+    readonly_fields = (
+        "lot",
+        "firma",
+        "perioada_contabila",
+        "incarcat_de",
+        "temp_storage_key",
+        "storage_key",
+        "nume_original",
+        "mime_type",
+        "dimensiune_declarata",
+        "dimensiune_bytes",
+        "checksum",
+        "status",
+        "eroare",
+        "expira_la",
+        "incarcat_la",
+        "creat_la",
+    )
+
+    def has_add_permission(self, request) -> bool:
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:
+        return False
+
+    def has_delete_permission(self, request, obj=None) -> bool:
+        return False
+
+
 platform_admin_site.register(Document, DocumentAdmin)
 platform_admin_site.register(FisierDocument, FisierDocumentAdmin)
 platform_admin_site.register(Comentariu, ComentariuAdmin)
 platform_admin_site.register(IntentieUpload, IntentieUploadAdmin)
+platform_admin_site.register(LotIncarcare, LotIncarcareAdmin)
+platform_admin_site.register(FisierInbox, FisierInboxAdmin)

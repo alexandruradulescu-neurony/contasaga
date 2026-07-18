@@ -5,7 +5,7 @@ from django.db import connections
 from django.db.migrations.executor import MigrationExecutor
 from django.utils import timezone
 
-from documente.models import FisierDocument
+from documente.models import FisierDocument, FisierInbox, LotIncarcare
 from documente.processing import LEASE_PROCESARE
 from documente.storage import get_document_storage
 from exporturi.models import Export
@@ -132,6 +132,15 @@ class Command(BaseCommand):
                     sters_la__isnull=True,
                 )
                 .count(),
+                "uploaduri inbox expirate": FisierInbox.objects.using("privileged")
+                .filter(
+                    status__in=(
+                        FisierInbox.Status.IN_ASTEPTARE,
+                        FisierInbox.Status.EROARE,
+                    ),
+                    expira_la__lte=timezone.now(),
+                )
+                .count(),
                 "exporturi în lucru": Export.objects.using("privileged")
                 .filter(status=Export.Status.IN_LUCRU)
                 .count(),
@@ -154,6 +163,20 @@ class Command(BaseCommand):
                 .count(),
             }
             self.stdout.write("[INFO] Cozi: " + "; ".join(f"{k}={v}" for k, v in cozi.items()))
+            inbox_business = {
+                "de clasificat": FisierInbox.objects.using("privileged")
+                .filter(status=FisierInbox.Status.DISPONIBIL)
+                .count(),
+                "cu eroare păstrată în istoric": FisierInbox.objects.using("privileged")
+                .filter(status=FisierInbox.Status.EROARE)
+                .count(),
+                "loturi deschise": LotIncarcare.objects.using("privileged")
+                .filter(status=LotIncarcare.Status.IN_DESFASURARE)
+                .count(),
+            }
+            self.stdout.write(
+                "[INFO] Inbox business: " + "; ".join(f"{k}={v}" for k, v in inbox_business.items())
+            )
             for nume, valoare in cozi.items():
                 if valoare:
                     avertismente.append(f"Coada operațională necesită triere: {nume}={valoare}")

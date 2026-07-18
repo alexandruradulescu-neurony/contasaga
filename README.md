@@ -47,6 +47,16 @@ contabilă. Fluxul folosește intenții semnate, upload `PUT`, finalizare unică
 aceeași validare ca backend-ul cloud; nu necesită Docker, Redis sau un cont
 cloud.
 
+Pagina lunii oferă și un inbox pentru încărcare în masă. Un lot poate conține
+până la 500 de fișiere PDF/JPG/PNG/HEIC, maximum 25 MB fiecare și 2 GB în total.
+Încărcările incomplete stau cel mult 24 de ore în
+`_temp/<lot UUID>/`, iar originalele validate sunt mutate în
+`inbox/<lot UUID>/originals/` și păstrează în baza de date numele inițial,
+uploaderul, dimensiunea și checksum-ul. În această primă fază fișierele rămân
+necategorizate; clasificarea contabilului și arhiva lunară cu nume lizibile sunt
+fazele următoare descrise în
+[`docs/BULK_INBOX_AND_MONTH_ARCHIVE.md`](docs/BULK_INBOX_AND_MONTH_ARCHIVE.md).
+
 Pentru Cloudflare R2 setează `DOCUMENT_STORAGE_BACKEND=r2` și variabilele
 `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`.
 Bucket-ul trebuie să permită din originile aplicației metoda `PUT` și header-ul
@@ -59,7 +69,9 @@ când cea nouă este validată. Deschiderea și descărcarea folosesc adrese sem
 cu expirare scurtă (cinci minute implicit), atât local, cât și în R2.
 Reprocesarea fișierelor eșuate poate fi pornită cu
 `uv run python manage.py process_document_files`, iar intențiile expirate se
-curăță cu `uv run python manage.py cleanup_upload_intents`. Workerul recuperează
+curăță cu `uv run python manage.py cleanup_upload_intents`. Obiectele temporare
+ale inboxului se curăță cu `uv run python manage.py cleanup_inbox_uploads`.
+Workerul recuperează
 automat procesările întrerupte după expirarea lease-ului de 15 minute. În
 storage-ul local, directoarele și fișierele sunt create cu acces exclusiv
 pentru utilizatorul macOS care rulează aplicația.
@@ -136,7 +148,8 @@ rolul web are numai acces de citire la tabela logistică.
 
 Comanda `run_scheduled_maintenance frequent` reîncearcă procesarea fișierelor,
 emailurile din outbox și exporturile. Comanda `run_scheduled_maintenance daily`
-curăță intențiile de upload și exporturile expirate. Exemplele launchd sunt:
+curăță intențiile de upload, obiectele temporare ale inboxului și exporturile
+expirate. Exemplele launchd sunt:
 
 - `config/com.contasaga.frequent-maintenance.plist.example` — la 5 minute;
 - `config/com.contasaga.daily-maintenance.plist.example` — zilnic;

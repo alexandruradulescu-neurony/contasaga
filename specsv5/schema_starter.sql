@@ -600,6 +600,159 @@ CREATE INDEX idx_fisiere_procesare_blocata
     ON fisiere_document(procesare_inceputa_la)
     WHERE stare_procesare = 'in_lucru' AND sters_la IS NULL;
 
+-- Inbox-ul lunar primește fișiere încă neclasificate. Un lot aparține exact
+-- unei firme și unei luni; fiecare fișier este scris întâi în _temp și devine
+-- vizibil contabilului numai după validare și mutarea în inbox/originals.
+CREATE TABLE loturi_incarcare (
+    id                           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    firma_id                     uuid NOT NULL REFERENCES firme(id) ON DELETE RESTRICT,
+    perioada_contabila_id        uuid NOT NULL,
+    creat_de                     uuid NOT NULL REFERENCES utilizatori(id) ON DELETE RESTRICT,
+    status                       varchar(20) NOT NULL DEFAULT 'in_desfasurare',
+    numar_fisiere_declarat       integer NOT NULL,
+    dimensiune_totala_declarata  bigint NOT NULL,
+    nota                         text,
+    finalizat_la                 timestamptz,
+    creat_la                     timestamptz NOT NULL DEFAULT now(),
+    actualizat_la                timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT uq_lot_firma_perioada UNIQUE (id, firma_id, perioada_contabila_id),
+    CONSTRAINT fk_lot_perioada FOREIGN KEY (perioada_contabila_id, firma_id)
+        REFERENCES perioade_contabile(id, firma_id) ON DELETE RESTRICT,
+    CONSTRAINT chk_lot_status CHECK (status IN (
+        'in_desfasurare', 'finalizat', 'partial', 'anulat'
+    )),
+    CONSTRAINT chk_lot_numar_fisiere CHECK (numar_fisiere_declarat BETWEEN 1 AND 500),
+    CONSTRAINT chk_lot_dimensiune CHECK (
+        dimensiune_totala_declarata BETWEEN 1 AND 2147483648
+    ),
+    CONSTRAINT chk_lot_nota CHECK (nota IS NULL OR char_length(nota) <= 2000),
+    CONSTRAINT chk_lot_finalizare CHECK (
+        (status = 'in_desfasurare' AND finalizat_la IS NULL)
+        OR (status <> 'in_desfasurare' AND finalizat_la IS NOT NULL)
+    )
+);
+
+CREATE INDEX idx_loturi_perioada ON loturi_incarcare(perioada_contabila_id, creat_la DESC);
+
+CREATE TRIGGER trg_loturi_actualizat
+    BEFORE UPDATE ON loturi_incarcare
+    FOR EACH ROW EXECUTE FUNCTION fn_set_actualizat_la();
+
+CREATE TABLE fisiere_inbox (
+    id                       uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    lot_id                   uuid NOT NULL,
+    firma_id                 uuid NOT NULL REFERENCES firme(id) ON DELETE RESTRICT,
+    perioada_contabila_id    uuid NOT NULL,
+    incarcat_de              uuid NOT NULL REFERENCES utilizatori(id) ON DELETE RESTRICT,
+    temp_storage_key         varchar(500) NOT NULL UNIQUE,
+    storage_key              varchar(500) UNIQUE,
+    nume_original            varchar(255) NOT NULL,
+    mime_type                varchar(100) NOT NULL,
+    dimensiune_declarata     bigint NOT NULL,
+    dimensiune_bytes         bigint,
+    checksum                 varchar(64),
+    status                   varchar(20) NOT NULL DEFAULT 'in_asteptare',
+    eroare                   text,
+    expira_la                timestamptz NOT NULL,
+    incarcat_la              timestamptz,
+    creat_la                 timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT fk_inbox_lot FOREIGN KEY (lot_id, firma_id, perioada_contabila_id)
+        REFERENCES loturi_incarcare(id, firma_id, perioada_contabila_id)
+        ON DELETE RESTRICT,
+    CONSTRAINT chk_inbox_dimensiune CHECK (
+        dimensiune_declarata BETWEEN 1 AND 26214400
+    ),
+    CONSTRAINT chk_inbox_nume CHECK (char_length(btrim(nume_original)) > 0),
+    CONSTRAINT chk_inbox_mime CHECK (mime_type IN (
+        'application/pdf', 'image/jpeg', 'image/png', 'image/heic', 'image/heif'
+    )),
+    CONSTRAINT chk_inbox_status CHECK (status IN (
+        'in_asteptare', 'disponibil', 'eroare', 'expirat', 'clasificat'
+    )),
+    CONSTRAINT chk_inbox_finalizare CHECK (
+        (status = 'in_asteptare'
+         AND storage_key IS NULL AND dimensiune_bytes IS NULL
+         AND checksum IS NULL AND incarcat_la IS NULL AND eroare IS NULL)
+        OR (status IN ('disponibil', 'clasificat')
+            AND storage_key IS NOT NULL AND dimensiune_bytes = dimensiune_declarata
+            AND checksum IS NOT NULL AND incarcat_la IS NOT NULL AND eroare IS NULL)
+        OR (status = 'eroare' AND storage_key IS NULL AND eroare IS NOT NULL)
+        OR (status = 'expirat' AND storage_key IS NULL)
+    )
+);
+
+CREATE INDEX idx_inbox_lot ON fisiere_inbox(lot_id, creat_la);
+CREATE INDEX idx_inbox_perioada_status
+    ON fisiere_inbox(perioada_contabila_id, status, creat_la);
+CREATE INDEX idx_inbox_expirate ON fisiere_inbox(expira_la)
+    WHERE status = 'in_asteptare';
+
+CREATE OR REPLACE FUNCTION fn_pregateste_fisier_inbox() RETURNS trigger AS $$
+DECLARE
+    v_an smallint;
+    v_luna smallint;
+    v_numar_declarat integer;
+    v_total_declarat bigint;
+    v_numar_curent integer;
+    v_total_curent bigint;
+BEGIN
+    IF NEW.id IS NULL THEN
+        NEW.id := gen_random_uuid();
+    END IF;
+
+    SELECT p.an, p.luna, l.numar_fisiere_declarat, l.dimensiune_totala_declarata
+      INTO v_an, v_luna, v_numar_declarat, v_total_declarat
+    FROM public.loturi_incarcare l
+    JOIN public.perioade_contabile p
+      ON p.id = l.perioada_contabila_id
+     AND p.firma_id = l.firma_id
+    WHERE l.id = NEW.lot_id
+      AND l.firma_id = NEW.firma_id
+      AND l.perioada_contabila_id = NEW.perioada_contabila_id
+      AND l.creat_de = NEW.incarcat_de
+      AND l.status = 'in_desfasurare'
+    FOR UPDATE OF l;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Lotul nu este activ în firma și perioada indicate';
+    END IF;
+
+    SELECT count(*), coalesce(sum(dimensiune_declarata), 0)
+      INTO v_numar_curent, v_total_curent
+    FROM public.fisiere_inbox
+    WHERE lot_id = NEW.lot_id;
+
+    IF v_numar_curent >= v_numar_declarat
+       OR v_total_curent + NEW.dimensiune_declarata > v_total_declarat THEN
+        RAISE EXCEPTION 'Fișierul depășește limitele declarate ale lotului';
+    END IF;
+
+    NEW.temp_storage_key := format(
+        'clients/%s/%s-%s/_temp/%s/%s.part',
+        NEW.firma_id,
+        v_an,
+        lpad(v_luna::text, 2, '0'),
+        NEW.lot_id,
+        NEW.id
+    );
+    NEW.storage_key := NULL;
+    NEW.dimensiune_bytes := NULL;
+    NEW.checksum := NULL;
+    NEW.status := 'in_asteptare';
+    NEW.eroare := NULL;
+    NEW.expira_la := now() + interval '24 hours';
+    NEW.incarcat_la := NULL;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+REVOKE ALL ON FUNCTION fn_pregateste_fisier_inbox() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION fn_pregateste_fisier_inbox() TO app_user, app_admin;
+
+CREATE TRIGGER trg_pregateste_fisier_inbox
+    BEFORE INSERT ON fisiere_inbox
+    FOR EACH ROW EXECUTE FUNCTION fn_pregateste_fisier_inbox();
+
 CREATE TABLE cerinte_documente_perioada (
     id                         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     perioada_contabila_id      uuid NOT NULL,
@@ -998,6 +1151,10 @@ REVOKE INSERT, UPDATE ON tipuri_document   FROM app_user;
 -- fișierul se creează/înlocuiește doar prin finalizarea privilegiată.
 REVOKE UPDATE ON intentii_upload FROM app_user;
 REVOKE INSERT, UPDATE ON fisiere_document FROM app_user;
+-- Loturile și fișierele inbox sunt create pe conexiunea web, dar orice
+-- finalizare sau schimbare de stare trece prin serviciul privilegiat.
+REVOKE UPDATE, DELETE ON loturi_incarcare FROM app_user;
+REVOKE UPDATE, DELETE ON fisiere_inbox FROM app_user;
 
 -- D3 (R5): coloana parola_hash NU e lizibilă pe conexiunea web — grant pe
 -- listă explicită de coloane. Autentificarea (care are nevoie de hash)
@@ -1170,6 +1327,24 @@ CREATE POLICY pol_documente_all ON documente
 ALTER TABLE fisiere_document ENABLE ROW LEVEL SECURITY;
 CREATE POLICY pol_fisiere_select ON fisiere_document FOR SELECT
     USING (firma_id IN (SELECT fn_firmele_utilizatorului()));
+
+ALTER TABLE loturi_incarcare ENABLE ROW LEVEL SECURITY;
+CREATE POLICY pol_loturi_select ON loturi_incarcare FOR SELECT
+    USING (firma_id IN (SELECT fn_firmele_utilizatorului()));
+CREATE POLICY pol_loturi_insert ON loturi_incarcare FOR INSERT
+    WITH CHECK (
+        firma_id IN (SELECT fn_firmele_utilizatorului())
+        AND creat_de = fn_utilizator_curent()
+    );
+
+ALTER TABLE fisiere_inbox ENABLE ROW LEVEL SECURITY;
+CREATE POLICY pol_inbox_select ON fisiere_inbox FOR SELECT
+    USING (firma_id IN (SELECT fn_firmele_utilizatorului()));
+CREATE POLICY pol_inbox_insert ON fisiere_inbox FOR INSERT
+    WITH CHECK (
+        firma_id IN (SELECT fn_firmele_utilizatorului())
+        AND incarcat_de = fn_utilizator_curent()
+    );
 
 ALTER TABLE cerinte_documente_perioada ENABLE ROW LEVEL SECURITY;
 CREATE POLICY pol_cerinte_all ON cerinte_documente_perioada

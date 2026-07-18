@@ -70,6 +70,7 @@ FIRMA_C='bbbbbbbb-0000-0000-0000-000000000001'
 CAB_ALPHA='11111111-1111-1111-1111-111111111111'
 CAB_BETA='22222222-2222-2222-2222-222222222222'
 PERIOADA_A='dddddddd-0000-0000-0000-000000000001'
+PERIOADA_C='dddddddd-0000-0000-0000-000000000002'
 
 pass=0; fail=0
 check() {
@@ -332,6 +333,28 @@ R=$($WORKER -c "BEGIN; UPDATE fisiere_document SET stare_procesare='in_lucru', p
 check "T83: lease-ul coerent al procesarii este acceptat" "1" "$R"
 R=$($WORKER -c "UPDATE fisiere_document SET stare_procesare='procesat', procesare_inceputa_la=now() WHERE id='20000000-0000-0000-0000-000000000001';" 2>&1 | grep -c "chk_fisier_lease_coerenta")
 check "T84: starea finala nu poate pastra un lease activ" "1" "$R"
+
+# ------------------------------------------------ bulk inbox lunar
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); INSERT INTO loturi_incarcare (id,firma_id,perioada_contabila_id,creat_de,numar_fisiere_declarat,dimensiune_totala_declarata) VALUES ('70000000-0000-0000-0000-000000000001','$FIRMA_A','$PERIOADA_A','$CLIENT_ID',1,1024) RETURNING 1; COMMIT;" 2>&1 | grep -c "^1$")
+check "T85: clientul poate crea un lot in firma si luna proprie" "1" "$R"
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); INSERT INTO loturi_incarcare (firma_id,perioada_contabila_id,creat_de,numar_fisiere_declarat,dimensiune_totala_declarata) VALUES ('$FIRMA_C','$PERIOADA_C','$CLIENT_ID',1,1024); ROLLBACK;" 2>&1 | grep -c "row-level security")
+check "T86: clientul nu poate crea lot in alta firma" "1" "$R"
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); INSERT INTO fisiere_inbox (id,lot_id,firma_id,perioada_contabila_id,incarcat_de,nume_original,mime_type,dimensiune_declarata,temp_storage_key,expira_la) VALUES ('71000000-0000-0000-0000-000000000001','70000000-0000-0000-0000-000000000001','$FIRMA_A','$PERIOADA_A','$CLIENT_ID','factura.pdf','application/pdf',1024,'atac',now()) RETURNING (temp_storage_key='clients/$FIRMA_A/2026-06/_temp/70000000-0000-0000-0000-000000000001/71000000-0000-0000-0000-000000000001.part' AND status='in_asteptare' AND expira_la BETWEEN now()+interval '23 hours 59 minutes' AND now()+interval '24 hours 1 minute')::int; COMMIT;" | num)
+check "T87: cheia temporara inbox si expirarea sunt generate de DB" "1" "$R"
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); UPDATE loturi_incarcare SET status='finalizat', finalizat_la=now() WHERE id='70000000-0000-0000-0000-000000000001'; ROLLBACK;" 2>&1 | grep -c "permission denied")
+check "T88: app_user nu poate falsifica finalizarea lotului" "1" "$R"
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); UPDATE fisiere_inbox SET status='disponibil',storage_key='atac',dimensiune_bytes=1,checksum=repeat('a',64),incarcat_la=now() WHERE id='71000000-0000-0000-0000-000000000001'; ROLLBACK;" 2>&1 | grep -c "permission denied")
+check "T89: app_user nu poate publica direct fisierul inbox" "1" "$R"
+R=$($WORKER -c "UPDATE fisiere_inbox SET status='disponibil',storage_key='clients/$FIRMA_A/2026-06/inbox/70000000-0000-0000-0000-000000000001/originals/71000000-0000-0000-0000-000000000001',mime_type='application/pdf',dimensiune_bytes=1024,checksum=repeat('a',64),incarcat_la=now() WHERE id='71000000-0000-0000-0000-000000000001' RETURNING 1;" 2>&1 | grep -c "^1$")
+check "T90: serviciul privilegiat poate publica fisierul validat" "1" "$R"
+R=$($PSQL -c "SELECT count(*) FROM loturi_incarcare;")
+check "T91: fara identitate loturile inbox sunt invizibile" "0" "$R"
+R=$($PSQL -c "SELECT count(*) FROM fisiere_inbox;")
+check "T92: fara identitate fisierele inbox sunt invizibile" "0" "$R"
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); INSERT INTO fisiere_inbox (lot_id,firma_id,perioada_contabila_id,incarcat_de,nume_original,mime_type,dimensiune_declarata,temp_storage_key,expira_la) VALUES ('70000000-0000-0000-0000-000000000001','$FIRMA_A','$PERIOADA_A','$CLIENT_ID','a-doua-factura.pdf','application/pdf',1,'atac',now()); ROLLBACK;" 2>&1 | grep -c "depășește limitele declarate")
+check "T93: triggerul nu permite mai multe fișiere decât declară lotul" "1" "$R"
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); INSERT INTO loturi_incarcare (firma_id,perioada_contabila_id,creat_de,numar_fisiere_declarat,dimensiune_totala_declarata) VALUES ('$FIRMA_A','$PERIOADA_A','$CLIENT_ID',501,1024); ROLLBACK;" 2>&1 | grep -c "chk_lot_numar_fisiere")
+check "T94: baza impune limita maximă a lotului" "1" "$R"
 
 echo ""
 echo "=============================="

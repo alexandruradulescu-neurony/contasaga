@@ -156,6 +156,116 @@ class IntentieUpload(models.Model):
         return self.nume_original or str(self.pk)
 
 
+class LotIncarcare(models.Model):
+    class Status(models.TextChoices):
+        IN_DESFASURARE = "in_desfasurare", "În desfășurare"
+        FINALIZAT = "finalizat", "Finalizat"
+        PARTIAL = "partial", "Finalizat parțial"
+        ANULAT = "anulat", "Anulat"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    firma = models.ForeignKey(
+        Firma,
+        db_column="firma_id",
+        on_delete=models.PROTECT,
+        related_name="loturi_incarcare",
+    )
+    perioada_contabila = models.ForeignKey(
+        PerioadaContabila,
+        db_column="perioada_contabila_id",
+        on_delete=models.PROTECT,
+        related_name="loturi_incarcare",
+    )
+    creat_de = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        db_column="creat_de",
+        on_delete=models.PROTECT,
+        related_name="loturi_incarcare_create",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.IN_DESFASURARE,
+    )
+    numar_fisiere_declarat = models.PositiveIntegerField()
+    dimensiune_totala_declarata = models.BigIntegerField()
+    nota = models.TextField(null=True, blank=True)  # noqa: DJ001
+    finalizat_la = models.DateTimeField(null=True, blank=True)
+    creat_la = models.DateTimeField(db_default=Now(), editable=False)
+    actualizat_la = models.DateTimeField(db_default=Now(), editable=False)
+
+    class Meta:
+        db_table = "loturi_incarcare"
+        managed = False
+        verbose_name = "lot de încărcare"
+        verbose_name_plural = "loturi de încărcare"
+        ordering = ("-creat_la",)
+
+    def __str__(self) -> str:
+        return f"{self.perioada_contabila_id} · {self.pk}"
+
+
+class FisierInbox(models.Model):
+    class Status(models.TextChoices):
+        IN_ASTEPTARE = "in_asteptare", "În așteptarea încărcării"
+        DISPONIBIL = "disponibil", "Disponibil pentru clasificare"
+        EROARE = "eroare", "Eroare"
+        EXPIRAT = "expirat", "Expirat"
+        CLASIFICAT = "clasificat", "Clasificat"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    lot = models.ForeignKey(
+        LotIncarcare,
+        db_column="lot_id",
+        on_delete=models.PROTECT,
+        related_name="fisiere",
+    )
+    firma = models.ForeignKey(
+        Firma,
+        db_column="firma_id",
+        on_delete=models.PROTECT,
+        related_name="fisiere_inbox",
+    )
+    perioada_contabila = models.ForeignKey(
+        PerioadaContabila,
+        db_column="perioada_contabila_id",
+        on_delete=models.PROTECT,
+        related_name="fisiere_inbox",
+    )
+    incarcat_de = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        db_column="incarcat_de",
+        on_delete=models.PROTECT,
+        related_name="fisiere_inbox_incarcate",
+    )
+    temp_storage_key = models.CharField(max_length=500)
+    storage_key = models.CharField(max_length=500, null=True, blank=True)  # noqa: DJ001
+    nume_original = models.CharField(max_length=255)
+    mime_type = models.CharField(max_length=100)
+    dimensiune_declarata = models.BigIntegerField()
+    dimensiune_bytes = models.BigIntegerField(null=True, blank=True)
+    checksum = models.CharField(max_length=64, null=True, blank=True)  # noqa: DJ001
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.IN_ASTEPTARE,
+    )
+    eroare = models.TextField(null=True, blank=True)  # noqa: DJ001
+    expira_la = models.DateTimeField(db_default=Now())
+    incarcat_la = models.DateTimeField(null=True, blank=True)
+    creat_la = models.DateTimeField(db_default=Now(), editable=False)
+
+    class Meta:
+        db_table = "fisiere_inbox"
+        managed = False
+        verbose_name = "fișier inbox"
+        verbose_name_plural = "fișiere inbox"
+        ordering = ("creat_la",)
+
+    def __str__(self) -> str:
+        return self.nume_original
+
+
 class FisierDocument(models.Model):
     class StareProcesare(models.TextChoices):
         IN_ASTEPTARE = "in_asteptare", "În așteptare"

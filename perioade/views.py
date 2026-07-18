@@ -10,7 +10,7 @@ from conturi.models import Utilizator
 from core.audit import context_audit_din_request
 from core.models import IstoricStare
 from documente.forms import DocumentNouForm
-from documente.models import Document
+from documente.models import Document, FisierInbox
 from documente.services import poate_incarca_documente
 from exporturi.models import Export
 from exporturi.services import poate_solicita_export
@@ -159,6 +159,10 @@ def perioada_detaliu(request, perioada_id):
     documente_anulate = [
         document for document in documente if document.stare == Document.Stare.ANULAT
     ]
+    fisiere_inbox = FisierInbox.objects.filter(
+        perioada_contabila=perioada,
+        status=FisierInbox.Status.DISPONIBIL,
+    ).count()
     clarificari = sum(
         document.stare == Document.Stare.NECESITA_CLARIFICARI for document in documente_curente
     )
@@ -263,6 +267,7 @@ def perioada_detaliu(request, perioada_id):
             "documente_initiale": documente_curente[:12],
             "documente_restante": documente_curente[12:],
             "documente_anulate": documente_anulate,
+            "fisiere_inbox": fisiere_inbox,
             "cerinte_total": cerinte_total,
             "cerinte_complete": cerinte_complete,
             "cerinte_ramase": cerinte_ramase,

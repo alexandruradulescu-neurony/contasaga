@@ -26,7 +26,13 @@ from documente.storage import (
     R2DocumentStorage,
     get_document_storage,
 )
-from documente.storage_keys import cheie_document, cheie_thumbnail, prefix_lunar
+from documente.storage_keys import (
+    cheie_document,
+    cheie_original_inbox,
+    cheie_temporara_inbox,
+    cheie_thumbnail,
+    prefix_lunar,
+)
 from documente.upload import _utilizator_cu_acces_privilegiat, poate_atasa_fisiere
 
 
@@ -71,6 +77,26 @@ class StorageKeyLayoutTests(SimpleTestCase):
                 fisier_id=fisier_id,
             ),
             f"clients/{firma_id}/2026-07/thumbnails/{fisier_id}.png",
+        )
+        self.assertEqual(
+            cheie_temporara_inbox(
+                firma_id=firma_id,
+                an=2026,
+                luna=7,
+                lot_id=intentie_id,
+                fisier_id=fisier_id,
+            ),
+            f"clients/{firma_id}/2026-07/_temp/{intentie_id}/{fisier_id}.part",
+        )
+        self.assertEqual(
+            cheie_original_inbox(
+                firma_id=firma_id,
+                an=2026,
+                luna=7,
+                lot_id=intentie_id,
+                fisier_id=fisier_id,
+            ),
+            f"clients/{firma_id}/2026-07/inbox/{intentie_id}/originals/{fisier_id}",
         )
 
     def test_invalid_month_is_rejected(self):

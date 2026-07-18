@@ -55,6 +55,11 @@ izolat de rețea și accesibil numai superuserului, folosește
 - cozile operaționale inspectabile și fără elemente netriate; orice element
   pending/retry sau eșuat produce avertisment și blochează modul `--strict`.
 
+Fișierele inbox disponibile pentru clasificare, erorile istorice și loturile
+încă deschise sunt raportate separat ca volum de business și nu blochează un
+release. Numai obiectele temporare ajunse la expirare fără cleanup sunt o
+problemă operațională.
+
 În CI/staging se rulează suplimentar:
 
 ```bash

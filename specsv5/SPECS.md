@@ -482,6 +482,20 @@ versiuni, FK compus — nu poate traversa firmele), `sters_la/sters_de`
 pagini are fișierul (calculat de pipeline); `ordine` = poziția fișierului
 în cadrul documentului (afișare).
 
+**Inbox pentru încărcare multiplă**: un lot necategorizat nu creează
+documente `draft`. `loturi_incarcare` leagă seria de exact o firmă și o
+perioadă contabilă, iar `fisiere_inbox` păstrează câte un original, uploaderul,
+numele, dimensiunea și checksum-ul. Triggerul DB generează o cheie temporară
+`clients/<firma>/<AAAA-LL>/_temp/<lot>/<fisier>.part`; după verificarea
+extensiei, MIME-ului și magic bytes, serviciul privilegiat copiază și verifică
+SHA-256 înainte de a publica originalul în
+`clients/<firma>/<AAAA-LL>/inbox/<lot>/originals/<fisier>`. Intențiile
+temporare expiră după 24h, iar `cleanup_inbox_uploads` elimină obiectele
+abandonate. Originalele validate pot fi descărcate numai după verificarea RLS,
+printr-o adresă semnată cu expirare scurtă. Clasificarea nu este dedusă în
+această etapă; planul complet este în
+`docs/BULK_INBOX_AND_MONTH_ARCHIVE.md`.
+
 **Flux** (R5 — cu upload intent server-side, D13):
 1. UI-ul creează mai întâi obiectul `documente` în stare `draft`, apoi cere
    upload pentru acel document. Serverul inserează un rând în
