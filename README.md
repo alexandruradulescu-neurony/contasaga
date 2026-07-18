@@ -2,6 +2,10 @@
 
 Aplicație Django pentru colaborarea dintre firmele de contabilitate și firmele cliente.
 
+Producția este livrată în Railway exclusiv din ramura `main`; dezvoltarea
+curentă rămâne pe `dev`. Configurația și pașii operaționali sunt documentați în
+[`docs/RAILWAY_DEPLOYMENT.md`](docs/RAILWAY_DEPLOYMENT.md).
+
 Specificația reconciliată cu implementarea se află în
 [`specsv5/SPECS.md`](specsv5/SPECS.md). Identificatorii istorici `cabinet_*`
 rămân intenționat în baza de date și în cod; interfața și documentația pentru
