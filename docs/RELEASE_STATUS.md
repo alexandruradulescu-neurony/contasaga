@@ -66,8 +66,9 @@ Faza 1 a inboxului lunar pentru încărcare în masă este implementată și tes
 pe `dev`: loturi de maximum 500 de fișiere, upload concurent cu retry, staging
 în `_temp`, verificare de tip/checksum, publicare în `inbox`, audit, RLS și
 curățare zilnică. Testele sintetice de browser au fost șterse după validare, iar
-cozile locale au rămas curate. Schimbarea nu este încă în `main` și nu este încă
-prezentă pe instanța Railway live.
+cozile locale au rămas curate. Schimbarea este în `main` și rulează pe instanța
+Railway live; migrarea `documente.0007_bulk_inbox`, noile tabele și endpointurile
+publice de health au fost verificate după deployment.
 
 ## Porți externe
 

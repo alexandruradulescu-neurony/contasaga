@@ -2,9 +2,9 @@
 
 ## Implementation status — 18 July 2026
 
-Phase 1 is implemented and validated on the `dev` branch. It has not yet been
-merged into `main` or deployed to production. Phases 2–6 below remain the
-approved delivery plan; they are not represented as finished functionality.
+Phase 1 is implemented, validated, merged into `main` and deployed to Railway
+production. Phases 2–6 below remain the approved delivery plan; they are not
+represented as finished functionality.
 
 ## Product decision
 

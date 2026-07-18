@@ -53,11 +53,9 @@ directories. This supports a single web replica but is not the final
 production storage design. Invitation and password-reset email uses the
 console backend until real SMTP credentials are configured.
 
-The next unreleased `dev` change adds the monthly bulk inbox. After that change
-is deliberately released through `main`, the same monthly root will also have
-`_temp/<batch UUID>/` for expiring uploads and
-`inbox/<batch UUID>/originals/` for validated immutable originals. Do not rely
-on those directories on the current production build before that release.
+The production build includes the monthly bulk inbox. The same monthly root
+also has `_temp/<batch UUID>/` for expiring uploads and
+`inbox/<batch UUID>/originals/` for validated immutable originals.
 
 Before accepting real client data, replace both temporary choices:
 
