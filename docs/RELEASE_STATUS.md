@@ -2,14 +2,15 @@
 
 ## Verdict curent
 
-**Pregătit pentru staging; nepregătit încă pentru producție.** Codul, schema și
-cozile locale trec verificările automate, dar producția depinde de providerii,
-domeniile, backup/restore-ul și aprobările enumerate în
-`RELEASE_READINESS.md`.
+**Bootstrap-ul Railway este online; nepregătit încă pentru date reale de
+producție.** Codul, schema și cozile trec verificările automate, iar serviciul
+public răspunde prin HTTPS. Producția rămâne blocată de regiunea de date,
+providerii de storage/email, joburile operaționale, domeniul final,
+backup/restore și aprobările enumerate în `RELEASE_READINESS.md`.
 
 ## Dovezi automate
 
-- 95/95 teste Django/pytest;
+- 96/96 teste Django/pytest;
 - 84/84 verificări PostgreSQL/RLS pe topologia cu owner non-superuser;
 - `ruff check` și `ruff format --check` fără erori;
 - nicio migrare model lipsă și nicio migrare neaplicată;
@@ -25,6 +26,21 @@ domeniile, backup/restore-ul și aprobările enumerate în
   probleme în codul aplicației;
 - smoke test-urile autentificate pentru toate rolurile și ambele interfețe
   răspund corect.
+
+## Stare Railway
+
+- proiect `authentic-abundance`, mediu `production`;
+- serviciul public `contasaga` urmărește exclusiv ramura GitHub `main`;
+- `https://contasaga-production.up.railway.app` răspunde corect pentru login,
+  static assets, live health și readiness;
+- readiness confirmă baza PostgreSQL, storage-ul montat, rolurile tehnice,
+  migrările, cache-ul partajat și cozi operaționale goale;
+- verificarea strictă rămâne blocată intenționat de storage-ul local și
+  backend-ul de email console;
+- web-ul și PostgreSQL rulează momentan în US West; regiunea trebuie decisă și
+  mutată în UE înaintea datelor reale;
+- nu există conturi sau firme seed-uite în producție, iar cronurile, workerul
+  și Admin-ul privilegiat separat nu sunt încă pornite.
 
 Auditul complet din 18 iulie a întărit autorizarea operațiilor privilegiate,
 izolarea destinatarilor notificărilor, concurența upload/procesare, recuperarea
