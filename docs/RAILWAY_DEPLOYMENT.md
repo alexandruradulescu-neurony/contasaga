@@ -26,11 +26,14 @@ new deployment is started.
 - The `main` deployment is healthy and the public login page, static assets,
   PostgreSQL readiness, and the mounted document volume all answer correctly.
 - PostgreSQL is initialized with the separate `migrare`, `web_app`, and
-  `worker` roles. All migrations are applied and the operational queues are
-  empty.
-- No production tenant, user, or demo data has been seeded. This is
-  intentional: production identities and company details must not be guessed
-  from the local demo database.
+  `worker` roles. All migrations are applied.
+- At the owner's request, the complete development demo dataset was copied to
+  Railway on 18 July 2026: six users, one accounting firm, two customer
+  companies, their allocations and monthly checklists, audit/history records,
+  document metadata, and all 20 locally available document/thumbnail objects.
+  Database sessions and cache entries were intentionally not copied.
+- The demo credentials are suitable only for the requested demonstration.
+  Replace the demo identities and passwords before admitting real client data.
 - The public service does not expose Django Admin. The privileged platform
   admin still requires a separate, network-restricted Railway service using
   `config.settings.admin_prod`.
@@ -58,9 +61,9 @@ Before accepting real client data, replace both temporary choices:
    Validate invitation, reset-password, notification, and retry flows.
 4. Add the final custom domain, update `DJANGO_ALLOWED_HOSTS` and
    `DJANGO_CSRF_TRUSTED_ORIGINS`, then decide the final HSTS policy.
-5. Create the initial accounting-firm administrator and real tenant only after
-   their legal identity, CUI, administrator email, and initial-password
-   handoff have been agreed. Do not run `seed_local_demo` in production.
+5. Replace the copied demo accounts and companies with agreed production
+   identities, legal company data, and individually delivered passwords. Do
+   not run `seed_local_demo` directly in production.
 6. Deploy the frequent, daily, deadline-reminder, and export worker processes
    after R2 and SMTP pass their smoke tests.
 7. Run and document a PostgreSQL restore test, configure monitoring/alerts,

@@ -39,8 +39,12 @@ backup/restore și aprobările enumerate în `RELEASE_READINESS.md`.
   backend-ul de email console;
 - web-ul și PostgreSQL rulează momentan în US West; regiunea trebuie decisă și
   mutată în UE înaintea datelor reale;
-- nu există conturi sau firme seed-uite în producție, iar cronurile, workerul
-  și Admin-ul privilegiat separat nu sunt încă pornite.
+- la cererea proprietarului, setul demo local a fost copiat integral în
+  Railway: 6 utilizatori, o firmă de contabilitate, 2 firme client, alocări,
+  checklisturi, istoric/audit și toate cele 20 de obiecte locale disponibile;
+- sesiunile și cache-ul local nu au fost copiate, iar parolele demo trebuie
+  schimbate înaintea folosirii cu date reale;
+- cronurile, workerul și Admin-ul privilegiat separat nu sunt încă pornite.
 
 Auditul complet din 18 iulie a întărit autorizarea operațiilor privilegiate,
 izolarea destinatarilor notificărilor, concurența upload/procesare, recuperarea
