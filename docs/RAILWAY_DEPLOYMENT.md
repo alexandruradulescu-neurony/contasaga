@@ -47,9 +47,11 @@ new deployment is started.
 ## Temporary bootstrap configuration
 
 Until Cloudflare R2 is configured, document objects use the Railway volume
-mounted at `/data`, under `/data/documents`. This supports a single web replica
-but is not the final production storage design. Invitation and password-reset
-email uses the console backend until real SMTP credentials are configured.
+mounted at `/data`, under `/data/documents`. Within that root, objects use
+`clients/<client UUID>/<YYYY-MM>/documents/` and monthly `thumbnails/`
+directories. This supports a single web replica but is not the final
+production storage design. Invitation and password-reset email uses the
+console backend until real SMTP credentials are configured.
 
 Before accepting real client data, replace both temporary choices:
 

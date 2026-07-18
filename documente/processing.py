@@ -15,6 +15,7 @@ from notificari.services import notifica_eroare_procesare_fisier
 from .filetypes import detecteaza_tip, tipuri_compatibile
 from .models import FisierDocument
 from .storage import get_document_storage
+from .storage_keys import cheie_thumbnail
 
 pillow_heif.register_heif_opener()
 Image.MAX_IMAGE_PIXELS = 50_000_000
@@ -149,7 +150,13 @@ def proceseaza_fisier(fisier_id, *, reincearca=False):
         else:
             numar_pagini = 1
             thumbnail = _thumbnail_imagine(continut)
-        thumbnail_key = f"thumbnails/{fisier.firma_id}/{fisier.pk}.png"
+        perioada = fisier.document.perioada_contabila
+        thumbnail_key = cheie_thumbnail(
+            firma_id=fisier.firma_id,
+            an=perioada.an,
+            luna=perioada.luna,
+            fisier_id=fisier.pk,
+        )
         storage.put_bytes(thumbnail_key, thumbnail, "image/png")
     except Exception as exc:
         with transaction.atomic(using="privileged"):

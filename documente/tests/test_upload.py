@@ -7,12 +7,17 @@ from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
 from django.core.exceptions import PermissionDenied
+from django.core.management.base import CommandError
 from django.test import SimpleTestCase, override_settings
 from django.test.client import RequestFactory
 from django.utils import timezone
 
 from documente.access import continut_local_semnat, url_acces_fisier
 from documente.filetypes import TipFisierInvalid, detecteaza_tip, tip_pentru_upload
+from documente.management.commands.migrate_document_storage_layout import (
+    Command as MigrateStorageLayoutCommand,
+)
+from documente.management.commands.migrate_document_storage_layout import MutareObiect
 from documente.models import Document, FisierDocument
 from documente.processing import poate_porni_procesarea
 from documente.storage import (
@@ -21,6 +26,7 @@ from documente.storage import (
     R2DocumentStorage,
     get_document_storage,
 )
+from documente.storage_keys import cheie_document, cheie_thumbnail, prefix_lunar
 from documente.upload import _utilizator_cu_acces_privilegiat, poate_atasa_fisiere
 
 
@@ -40,6 +46,58 @@ class FileTypeTests(SimpleTestCase):
         self.assertEqual(detecteaza_tip(b"\xff\xd8\xffrest"), "image/jpeg")
         with self.assertRaises(TipFisierInvalid):
             detecteaza_tip(b"not-a-document")
+
+
+class StorageKeyLayoutTests(SimpleTestCase):
+    def test_objects_are_grouped_by_client_and_accounting_month(self):
+        firma_id = uuid4()
+        intentie_id = uuid4()
+        fisier_id = uuid4()
+
+        self.assertEqual(
+            cheie_document(
+                firma_id=firma_id,
+                an=2026,
+                luna=7,
+                intentie_id=intentie_id,
+            ),
+            f"clients/{firma_id}/2026-07/documents/{intentie_id}",
+        )
+        self.assertEqual(
+            cheie_thumbnail(
+                firma_id=firma_id,
+                an=2026,
+                luna=7,
+                fisier_id=fisier_id,
+            ),
+            f"clients/{firma_id}/2026-07/thumbnails/{fisier_id}.png",
+        )
+
+    def test_invalid_month_is_rejected(self):
+        with self.assertRaises(ValueError):
+            prefix_lunar(firma_id=uuid4(), an=2026, luna=13)
+
+    @override_settings(DOCUMENT_STORAGE_BACKEND="local")
+    def test_legacy_object_is_copied_only_when_content_matches(self):
+        with TemporaryDirectory() as directory:
+            with override_settings(DOCUMENT_LOCAL_STORAGE_ROOT=directory):
+                get_document_storage.cache_clear()
+                self.addCleanup(get_document_storage.cache_clear)
+                storage = get_document_storage()
+                storage.put_bytes("staging/source", b"abcdef", "application/pdf")
+                mutare = MutareObiect(
+                    veche="staging/source",
+                    noua="clients/client/2026-07/documents/target",
+                    content_type="application/pdf",
+                    lipsa_permisa=False,
+                )
+
+                self.assertTrue(MigrateStorageLayoutCommand()._copiaza(mutare))
+                self.assertEqual(storage.read_bytes(mutare.noua), b"abcdef")
+
+                storage.put_bytes(mutare.noua, b"ABCDEF", "application/pdf")
+                with self.assertRaises(CommandError):
+                    MigrateStorageLayoutCommand()._copiaza(mutare)
 
 
 class LocalStorageTests(SimpleTestCase):

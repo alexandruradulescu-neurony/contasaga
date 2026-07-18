@@ -10,7 +10,7 @@ backup/restore și aprobările enumerate în `RELEASE_READINESS.md`.
 
 ## Dovezi automate
 
-- 96/96 teste Django/pytest;
+- 99/99 teste Django/pytest;
 - 84/84 verificări PostgreSQL/RLS pe topologia cu owner non-superuser;
 - `ruff check` și `ruff format --check` fără erori;
 - nicio migrare model lipsă și nicio migrare neaplicată;
@@ -35,6 +35,9 @@ backup/restore și aprobările enumerate în `RELEASE_READINESS.md`.
   static assets, live health și readiness;
 - readiness confirmă baza PostgreSQL, storage-ul montat, rolurile tehnice,
   migrările, cache-ul partajat și cozi operaționale goale;
+- documentele persistă pe volumul montat la `/data`, sub
+  `/data/documents/clients/<client UUID>/<YYYY-MM>/`, iar configurația de
+  producție nu conține valori `localhost`, `127.0.0.1` sau `.test`;
 - verificarea strictă rămâne blocată intenționat de storage-ul local și
   backend-ul de email console;
 - web-ul și PostgreSQL rulează momentan în US West; regiunea trebuie decisă și

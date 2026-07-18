@@ -489,7 +489,10 @@ pagini are fișierul (calculat de pipeline); `ordine` = poziția fișierului
    `document_id` **obligatoriu** și, la înlocuire,
    `inlocuieste_fisier_id`. FK-ul compus impune ca ținta să aparțină aceluiași
    document încă de la inițiere. Triggerul DB generează/înlocuiește
-   `storage_key` (`staging/<firma>/<intent>`) și fixează expirarea la 1h;
+   `storage_key` (`clients/<firma>/<AAAA-LL>/documents/<intent>`) folosind
+   luna perioadei contabile și fixează expirarea la 1h. Obiectele sunt astfel
+   separate întâi pe client, apoi pe lună; thumbnail-urile folosesc același
+   prefix lunar în subdirectorul `thumbnails`;
    clientul nu poate alege cheia, expirarea sau `folosita_la`. Serverul
    returnează presigned PUT pe exact acea cheie. Limite: **max 25
    MB/fișier, max 300 pagini/PDF**; tipuri: PDF, JPG, PNG, HEIC.

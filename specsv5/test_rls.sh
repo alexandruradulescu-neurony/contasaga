@@ -152,17 +152,17 @@ $WORKER -c "INSERT INTO documente (id, firma_id, perioada_contabila_id, tip_docu
     ('30000000-0000-0000-0000-000000000002','$FIRMA_C','10000000-0000-0000-0000-000000000002','$BETA_ID'),
     ('30000000-0000-0000-0000-000000000003','$FIRMA_A','10000000-0000-0000-0000-000000000003','$ANA_ID');
   INSERT INTO fisiere_document (id, document_id, firma_id, upload_intentie_id, storage_key, incarcat_de) VALUES
-    ('20000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','$FIRMA_A','30000000-0000-0000-0000-000000000001','staging/$FIRMA_A/30000000-0000-0000-0000-000000000001','$ANA_ID'),
-    ('20000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','$FIRMA_C','30000000-0000-0000-0000-000000000002','staging/$FIRMA_C/30000000-0000-0000-0000-000000000002','$BETA_ID'),
-    ('20000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003','$FIRMA_A','30000000-0000-0000-0000-000000000003','staging/$FIRMA_A/30000000-0000-0000-0000-000000000003','$ANA_ID');
+    ('20000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','$FIRMA_A','30000000-0000-0000-0000-000000000001','clients/$FIRMA_A/2026-06/documents/30000000-0000-0000-0000-000000000001','$ANA_ID'),
+    ('20000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','$FIRMA_C','30000000-0000-0000-0000-000000000002','clients/$FIRMA_C/2026-06/documents/30000000-0000-0000-0000-000000000002','$BETA_ID'),
+    ('20000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000003','$FIRMA_A','30000000-0000-0000-0000-000000000003','clients/$FIRMA_A/2026-06/documents/30000000-0000-0000-0000-000000000003','$ANA_ID');
   UPDATE intentii_upload SET folosita_la=now()
   WHERE id IN ('30000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000002','30000000-0000-0000-0000-000000000003');" > /dev/null 2>&1
 
 $WORKER -c "INSERT INTO intentii_upload (id, firma_id, document_id, utilizator_id) VALUES ('30000000-0000-0000-0000-000000000004','$FIRMA_A','10000000-0000-0000-0000-000000000001','$ANA_ID');" > /dev/null 2>&1
-R=$($WORKER -c "INSERT INTO fisiere_document (document_id, firma_id, upload_intentie_id, storage_key, incarcat_de, inlocuieste_fisier_id) VALUES ('10000000-0000-0000-0000-000000000001','$FIRMA_A','30000000-0000-0000-0000-000000000004','staging/$FIRMA_A/30000000-0000-0000-0000-000000000004','$ANA_ID','20000000-0000-0000-0000-000000000002');" 2>&1 | grep -c "fk_fisier_inlocuieste")
+R=$($WORKER -c "INSERT INTO fisiere_document (document_id, firma_id, upload_intentie_id, storage_key, incarcat_de, inlocuieste_fisier_id) VALUES ('10000000-0000-0000-0000-000000000001','$FIRMA_A','30000000-0000-0000-0000-000000000004','clients/$FIRMA_A/2026-06/documents/30000000-0000-0000-0000-000000000004','$ANA_ID','20000000-0000-0000-0000-000000000002');" 2>&1 | grep -c "fk_fisier_inlocuieste")
 check "T23: inlocuirea unui fisier din alta firma respinsa" "1" "$R"
 $WORKER -c "INSERT INTO intentii_upload (id, firma_id, document_id, utilizator_id) VALUES ('30000000-0000-0000-0000-000000000005','$FIRMA_A','10000000-0000-0000-0000-000000000001','$ANA_ID');" > /dev/null 2>&1
-R=$($WORKER -c "INSERT INTO fisiere_document (document_id, firma_id, upload_intentie_id, storage_key, incarcat_de, inlocuieste_fisier_id) VALUES ('10000000-0000-0000-0000-000000000001','$FIRMA_A','30000000-0000-0000-0000-000000000005','staging/$FIRMA_A/30000000-0000-0000-0000-000000000005','$ANA_ID','20000000-0000-0000-0000-000000000003');" 2>&1 | grep -c "fk_fisier_inlocuieste")
+R=$($WORKER -c "INSERT INTO fisiere_document (document_id, firma_id, upload_intentie_id, storage_key, incarcat_de, inlocuieste_fisier_id) VALUES ('10000000-0000-0000-0000-000000000001','$FIRMA_A','30000000-0000-0000-0000-000000000005','clients/$FIRMA_A/2026-06/documents/30000000-0000-0000-0000-000000000005','$ANA_ID','20000000-0000-0000-0000-000000000003');" 2>&1 | grep -c "fk_fisier_inlocuieste")
 check "T24: inlocuirea unui fisier din ALT DOCUMENT respinsa" "1" "$R"
 
 R=$($WORKER -c "UPDATE perioade_contabile SET contabil_responsabil_id='$BETA_ID' WHERE id='$PERIOADA_A';" 2>&1 | grep -c "membru intern al cabinetului")
@@ -212,9 +212,9 @@ R=$($WORKER -c "UPDATE tipuri_document SET retentie_ani=1 WHERE cod='factura';" 
 check "T40: retentie_ani sub minimul legal respinsa" "1" "$R"
 
 # ------------------------------------------------ upload intents (D13)
-R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); INSERT INTO intentii_upload (id, firma_id, document_id, utilizator_id) VALUES ('30000000-0000-0000-0000-000000000010','$FIRMA_A','10000000-0000-0000-0000-000000000001','$CLIENT_ID') RETURNING (storage_key='staging/$FIRMA_A/30000000-0000-0000-0000-000000000010' AND expira_la BETWEEN now()+interval '59 minutes' AND now()+interval '61 minutes' AND folosita_la IS NULL)::int; ROLLBACK;" | num)
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); INSERT INTO intentii_upload (id, firma_id, document_id, utilizator_id) VALUES ('30000000-0000-0000-0000-000000000010','$FIRMA_A','10000000-0000-0000-0000-000000000001','$CLIENT_ID') RETURNING (storage_key='clients/$FIRMA_A/2026-06/documents/30000000-0000-0000-0000-000000000010' AND expira_la BETWEEN now()+interval '59 minutes' AND now()+interval '61 minutes' AND folosita_la IS NULL)::int; ROLLBACK;" | num)
 check "T41: intent propriu acceptat; cheia/expirarea generate de DB" "1" "$R"
-R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); INSERT INTO intentii_upload (firma_id, document_id, utilizator_id) VALUES ('$FIRMA_C','10000000-0000-0000-0000-000000000002','$CLIENT_ID'); ROLLBACK;" 2>&1 | grep -c "row-level security")
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); INSERT INTO intentii_upload (firma_id, document_id, utilizator_id) VALUES ('$FIRMA_C','10000000-0000-0000-0000-000000000002','$CLIENT_ID'); ROLLBACK;" 2>&1 | grep -Ec "row-level security|Documentul/perioada nu există")
 check "T42: intent pe firma straina respins" "1" "$R"
 
 # ------------------------------------------------ checklist
@@ -237,16 +237,16 @@ R=$($WORKER -c "INSERT INTO documente (firma_id, perioada_contabila_id, tip_docu
 check "T47: extensia documentului nu poate scurta retentia legala" "1" "$R"
 
 $PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); INSERT INTO intentii_upload (id, firma_id, document_id, utilizator_id) VALUES ('30000000-0000-0000-0000-000000000011','$FIRMA_A','10000000-0000-0000-0000-000000000001','$CLIENT_ID'); COMMIT;" > /dev/null 2>&1
-R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); UPDATE intentii_upload SET firma_id='$FIRMA_C', document_id='10000000-0000-0000-0000-000000000002', storage_key='staging/foreign/rewritten', expira_la=now()+interval '30 days', folosita_la=now() WHERE id='30000000-0000-0000-0000-000000000011'; ROLLBACK;" 2>&1 | grep -c "permission denied")
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); UPDATE intentii_upload SET firma_id='$FIRMA_C', document_id='10000000-0000-0000-0000-000000000002', storage_key='clients/foreign/rewritten', expira_la=now()+interval '30 days', folosita_la=now() WHERE id='30000000-0000-0000-0000-000000000011'; ROLLBACK;" 2>&1 | grep -c "permission denied")
 check "T48: intentul existent este imuabil pentru app_user" "1" "$R"
 
-R=$($WORKER -c "INSERT INTO intentii_upload (firma_id, utilizator_id) VALUES ('$FIRMA_A','$ANA_ID');" 2>&1 | grep -c "not-null constraint")
+R=$($WORKER -c "INSERT INTO intentii_upload (firma_id, utilizator_id) VALUES ('$FIRMA_A','$ANA_ID');" 2>&1 | grep -Ec "not-null constraint|Documentul/perioada nu există")
 check "T49: intentul fara document este respins" "1" "$R"
 
-R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); INSERT INTO fisiere_document (document_id,firma_id,upload_intentie_id,storage_key,incarcat_de) VALUES ('10000000-0000-0000-0000-000000000001','$FIRMA_A','30000000-0000-0000-0000-000000000011','staging/$FIRMA_A/30000000-0000-0000-0000-000000000011','$CLIENT_ID'); ROLLBACK;" 2>&1 | grep -c "permission denied")
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); INSERT INTO fisiere_document (document_id,firma_id,upload_intentie_id,storage_key,incarcat_de) VALUES ('10000000-0000-0000-0000-000000000001','$FIRMA_A','30000000-0000-0000-0000-000000000011','clients/$FIRMA_A/2026-06/documents/30000000-0000-0000-0000-000000000011','$CLIENT_ID'); ROLLBACK;" 2>&1 | grep -c "permission denied")
 check "T50: app_user nu poate crea direct fisiere_document" "1" "$R"
 
-R=$($WORKER -c "INSERT INTO fisiere_document (document_id,firma_id,upload_intentie_id,storage_key,incarcat_de) VALUES ('10000000-0000-0000-0000-000000000001','$FIRMA_A','30000000-0000-0000-0000-000000000001','staging/$FIRMA_A/30000000-0000-0000-0000-000000000001','$ANA_ID');" 2>&1 | grep -c "uq_fisier_upload_intentie")
+R=$($WORKER -c "INSERT INTO fisiere_document (document_id,firma_id,upload_intentie_id,storage_key,incarcat_de) VALUES ('10000000-0000-0000-0000-000000000001','$FIRMA_A','30000000-0000-0000-0000-000000000001','clients/$FIRMA_A/2026-06/documents/30000000-0000-0000-0000-000000000001','$ANA_ID');" 2>&1 | grep -c "uq_fisier_upload_intentie")
 check "T51: un intent poate produce cel mult un fisier" "1" "$R"
 
 R=$($WORKER -c "INSERT INTO utilizator_firma (utilizator_id, firma_id, rol_in_firma) VALUES ('$ANA_ID','$FIRMA_C','contabil_alocat');" 2>&1 | grep -c "altui cabinet")

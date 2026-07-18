@@ -41,9 +41,11 @@ dacă o adresă de email există.
 ## Stocarea documentelor
 
 În dezvoltarea locală, `DOCUMENT_STORAGE_BACKEND=local` salvează obiectele în
-`.local-storage/`. Fluxul folosește intenții semnate, upload `PUT`, finalizare
-unică și aceeași validare ca backend-ul cloud; nu necesită Docker, Redis sau un
-cont cloud.
+`.local-storage/`. Documentele și thumbnail-urile sunt grupate în
+`clients/<client UUID>/<YYYY-MM>/`, separat pentru fiecare firmă client și lună
+contabilă. Fluxul folosește intenții semnate, upload `PUT`, finalizare unică și
+aceeași validare ca backend-ul cloud; nu necesită Docker, Redis sau un cont
+cloud.
 
 Pentru Cloudflare R2 setează `DOCUMENT_STORAGE_BACKEND=r2` și variabilele
 `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`.
