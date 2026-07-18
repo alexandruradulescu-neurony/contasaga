@@ -18,6 +18,7 @@
     </div>
     <div class="page-header__actions">
         <span class="status status--{{ perioada.stare }}">{{ perioada.get_stare_display }}</span>
+        {% if poate_incarca_documente and perioada.stare != "inchisa" %}<a class="btn" href="{% url 'inbox_perioada' perioada.id %}">Încarcă mai multe fișiere</a>{% endif %}
         {% if user.rol == "client_admin" and perioada.stare == "deschisa" %}
             {% if poate_confirma_complet %}
                 <form method="post" action="{% url 'perioada_confirmare' perioada.id %}">
@@ -222,7 +223,7 @@
         <section id="documente" class="panel">
             <div class="panel-header">
                 <div><p class="eyebrow">Fișiere și lucru în curs</p><h2>Documentele lunii · {{ documente|length }}</h2></div>
-                {% if poate_incarca_documente and perioada.stare != "inchisa" %}<div class="action-row"><a class="btn btn--secondary btn--small" href="{% url 'inbox_perioada' perioada.id %}">Încarcă un lot</a><a class="btn btn--ghost btn--small" href="#document-nou">Document clasificat</a></div>{% endif %}
+                {% if poate_incarca_documente and perioada.stare != "inchisa" %}<div class="action-row"><a class="btn btn--secondary btn--small" href="{% url 'inbox_perioada' perioada.id %}">Inbox încărcări</a><a class="btn btn--ghost btn--small" href="#document-nou">Document clasificat</a></div>{% endif %}
             </div>
             {% if fisiere_inbox %}<section class="next-step"><div><p class="next-step__title">{{ fisiere_inbox }} fișiere așteaptă clasificarea</p><p class="next-step__text">Au fost încărcate ca original necategorizat și sunt păstrate în inboxul acestei luni.</p></div><a class="btn btn--secondary btn--small" href="{% url 'inbox_perioada' perioada.id %}">Deschide inboxul</a></section>{% endif %}
             {% if documente %}

@@ -93,7 +93,8 @@
                     </div>
                     <div class="client-row__action">
                         {% if firma.perioada_curenta %}
-                            <a class="btn btn--secondary btn--small" href="{% url 'perioada_detaliu' firma.perioada_curenta.id %}">{% if este_client %}Continuă dosarul{% else %}Deschide dosarul{% endif %}</a>
+                            {% if poate_incarca_documente and firma.perioada_curenta.stare != "inchisa" %}<a class="btn btn--small" href="{% url 'inbox_perioada' firma.perioada_curenta.id %}">Încarcă mai multe fișiere</a>{% endif %}
+                            <a class="btn btn--secondary btn--small" href="{% url 'perioada_detaliu' firma.perioada_curenta.id %}">Vezi dosarul</a>
                         {% else %}
                             <a class="btn btn--secondary btn--small" href="{% url 'perioade_firma' firma.id %}">Vezi perioadele</a>
                         {% endif %}

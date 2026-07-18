@@ -4,6 +4,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 
 from documente.models import Document
+from documente.services import poate_incarca_documente
 from firme.models import Firma, FirmaContabilitate
 from perioade.models import CerintaDocumentPerioada, PerioadaContabila
 
@@ -97,6 +98,7 @@ def dashboard(request):
             "firma_contabilitate": firma_contabilitate,
             "este_contabil": este_contabil,
             "este_client": este_client,
+            "poate_incarca_documente": poate_incarca_documente(request.user),
             "documente_de_verificat": documente_de_verificat,
             "clarificari_de_rezolvat": clarificari_de_rezolvat,
             "dosare_active": sum(

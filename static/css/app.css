@@ -175,6 +175,7 @@ p { margin-bottom: .75rem; }
 .client-row:hover { background: #fbfdfc; }
 .client-row__name { margin-bottom: .15rem; font-size: 1.05rem; }
 .client-row__meta { margin: 0; color: var(--muted); font-size: .84rem; }
+.client-row__action { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: .5rem; }
 
 .progress { overflow: hidden; height: 7px; border-radius: 999px; background: #e4ece9; }
 .progress__bar { display: block; height: 100%; border-radius: inherit; background: var(--brand); }
