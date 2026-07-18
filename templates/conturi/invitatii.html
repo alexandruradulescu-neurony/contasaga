@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}{% if user.rol == "client_admin" %}Echipa clientului{% else %}Utilizatori{% endif %} · Conta Saga{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb"><a href="{% url 'dashboard' %}">Acasă</a><span>/</span><span>{% if user.rol == "client_admin" %}Echipă{% else %}Utilizatori{% endif %}</span></nav>
+<header class="page-header"><div class="page-header__copy"><p class="eyebrow">Acces și colaborare</p><h1>{% if user.rol == "client_admin" %}Invită un coleg{% else %}Invită un utilizator{% endif %}</h1><p class="lede">Invitațiile expiră după 7 zile și acordă acces numai rolului și firmei selectate.</p></div></header>
+
+<div class="content-grid content-grid--wide-aside">
+    <section class="panel">
+        <div class="panel-header"><div><p class="eyebrow">Istoric recent</p><h2>Invitații</h2></div></div>
+        {% if invitatii %}<div class="document-list">{% for invitatie in invitatii %}<article class="document-row"><div><h3 class="document-row__title">{{ invitatie.email }}</h3><p class="document-row__meta">{% if invitatie.firma %}{{ invitatie.firma.denumire }}{% else %}{{ invitatie.cabinet.denumire }}{% endif %}</p></div><div>{{ invitatie.get_rol_display }}</div><div><span class="status {% if invitatie.status == 'Acceptată' %}status--primit{% endif %}">{{ invitatie.status }}</span></div><div>{% if invitatie.poate_fi_anulata %}<form method="post" action="{% url 'invitatie_anulare' invitatie.id %}">{% csrf_token %}<button class="btn btn--ghost btn--small" type="submit">Anulează</button></form>{% endif %}</div></article>{% endfor %}</div>{% else %}<div class="empty-state"><span class="empty-state__icon">✉</span><h2>Nicio invitație trimisă</h2><p>Completează formularul pentru a acorda acces unui coleg sau client.</p></div>{% endif %}
+    </section>
+    <aside class="panel">
+        <p class="eyebrow">Invitație nouă</p><h2>Datele utilizatorului</h2>
+        <form method="post">{% csrf_token %}{{ form.non_field_errors }}{% for field in form %}<label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}{{ field.errors }}{% endfor %}<div class="form-actions"><button class="btn btn--block" type="submit">Generează invitația</button></div></form>
+    </aside>
+</div>
+{% endblock %}

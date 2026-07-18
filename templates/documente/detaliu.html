@@ -1,0 +1,422 @@
+{% extends "base.html" %}
+{% load ux %}
+
+{% block title %}{{ document.tip_document.denumire }} · {{ document.firma.denumire }}{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb" aria-label="Navigație secundară">
+    <a href="{% url 'dashboard' %}">Acasă</a><span>/</span>
+    <a href="{% url 'perioada_detaliu' document.perioada_contabila_id %}">{{ document.firma.denumire }} · {{ document.perioada_contabila.luna|luna_nume }}</a><span>/</span>
+    <span>{{ document.tip_document.denumire }}</span>
+</nav>
+
+<header class="page-header">
+    <div class="page-header__copy">
+        <p class="eyebrow">Document contabil</p>
+        <h1>{{ document.tip_document.denumire }}</h1>
+        <p class="lede">{{ document.firma.denumire }} · {{ document.perioada_contabila.luna|luna_nume }} {{ document.perioada_contabila.an }}{% if document.cont_financiar %} · {{ document.cont_financiar.denumire }}{% endif %}</p>
+    </div>
+    <div class="page-header__actions">
+        <span class="status status--{{ document.stare }}">{{ document.get_stare_display }}</span>
+        {% if poate_verifica and document.stare == "trimis" %}
+            <form method="post" action="{% url 'document_preluare' document.id %}">{% csrf_token %}<button type="submit">Preia pentru verificare</button></form>
+        {% elif poate_verifica and document.stare == "acceptat" %}
+            <form method="post" action="{% url 'document_procesare' document.id %}">{% csrf_token %}<button type="submit">Marchează procesat</button></form>
+        {% elif document.stare == "draft" and este_autor %}
+            {% if toate_fisierele_procesate %}<form method="post" action="{% url 'document_trimitere' document.id %}">{% csrf_token %}<button type="submit">Trimite contabilului</button></form>{% else %}<button type="button" disabled>Trimite contabilului</button>{% endif %}
+        {% endif %}
+    </div>
+</header>
+
+{% if document.incarcat_dupa_confirmare %}<div class="alert alert--warning">Acest document a fost adăugat după confirmarea dosarului lunar.</div>{% endif %}
+{% if document.predare_documente_id %}<div class="alert alert--info">Digitizat din predarea fizică „{{ document.predare_documente.get_metoda_display }}”. <a class="link" href="{% url 'perioada_detaliu' document.perioada_contabila_id %}#predare-{{ document.predare_documente_id }}">Vezi trasabilitatea predării</a>.</div>{% endif %}
+
+{% if document.stare == "draft" and este_autor %}
+    <section class="next-step">
+        <div><p class="next-step__title">{% if toate_fisierele_procesate %}Fișierele sunt pregătite pentru trimitere{% elif numar_fisiere_active %}Procesăm fișierele încărcate{% else %}Adaugă cel puțin un fișier{% endif %}</p><p class="next-step__text">{% if toate_fisierele_procesate %}Verifică fișierele și trimite documentul contabilului.{% elif numar_fisiere_active %}Trimiterea devine disponibilă după procesarea cu succes a tuturor fișierelor active.{% else %}Documentul rămâne privat în ciornă până când îl trimiți.{% endif %}</p></div>
+        {% if not numar_fisiere_active %}<a class="btn" href="#incarca-fisiere">Alege fișiere</a>{% endif %}
+    </section>
+{% elif document.stare == "trimis" %}
+    <section class="next-step next-step--info"><div><p class="next-step__title">Document trimis contabilului</p><p class="next-step__text">{% if poate_verifica %}Preia documentul pentru a începe verificarea.{% else %}Te vom notifica dacă sunt necesare informații suplimentare.{% endif %}</p></div></section>
+{% elif document.stare == "in_verificare" and poate_verifica %}
+    <section class="next-step next-step--info"><div><p class="next-step__title">Verifică fișierul și completează datele contabile</p><p class="next-step__text">Acceptă documentul dacă este corect sau cere clientului o clarificare.</p></div><a class="btn" href="#verificare">Continuă verificarea</a></section>
+{% elif document.stare == "necesita_clarificari" %}
+    <section class="next-step next-step--warning"><div><p class="next-step__title">Clarificare necesară</p><p class="next-step__text">{% if user.rol == "client_admin" or user.rol == "client_operator" %}Răspunde mesajului contabilului și, dacă este necesar, înlocuiește fișierul.{% else %}Aștepți răspunsul clientului.{% endif %}</p></div>{% if user.rol == "client_admin" or user.rol == "client_operator" %}<a class="btn" href="#raspunde">Răspunde contabilului</a>{% endif %}</section>
+{% elif document.stare == "procesat" or document.stare == "arhivat" %}
+    <section class="next-step"><div><p class="next-step__title">Document finalizat</p><p class="next-step__text">Datele contabile au fost validate{% if document.stare == "arhivat" %}, iar documentul este arhivat{% endif %}.</p></div></section>
+{% endif %}
+
+<div class="content-grid content-grid--wide-aside" style="margin-top: 1.25rem;">
+    <div class="stack">
+        <section class="panel" id="incarca-fisiere">
+            <div class="panel-header">
+                <div><p class="eyebrow">Conținut</p><h2>Fișiere</h2></div>
+                <span class="status">{{ numar_fisiere_active }} active</span>
+            </div>
+            {% if fisiere %}
+                {% for fisier in fisiere %}
+                    <article class="file-row">
+                        <div>
+                            <p class="file-row__name">{{ fisier.nume_original|default:"Fișier" }}</p>
+                            <p class="file-row__meta">Versiunea {{ fisier.versiune }} · {{ fisier.get_stare_procesare_display }}{% if fisier.numar_pagini %} · {{ fisier.numar_pagini }} pagini{% endif %}{% if not fisier.activ %} · versiune anterioară{% endif %}</p>
+                            {% if fisier.eroare_procesare %}<p class="error-text text-small">{{ fisier.eroare_procesare }}</p>{% endif %}
+                        </div>
+                        <div class="action-row">
+                            {% if fisier.stare_procesare == "procesat" %}<a class="btn btn--secondary btn--small" target="_blank" rel="noopener" href="{% url 'fisier_deschidere' fisier.id %}">Deschide</a><a class="btn btn--ghost btn--small" href="{% url 'fisier_descarcare' fisier.id %}">Descarcă</a>{% endif %}
+                            {% if fisier.activ and document.stare == "draft" and este_autor %}<form method="post" action="{% url 'fisier_stergere' fisier.id %}">{% csrf_token %}<button class="btn btn--ghost btn--small" type="submit">Elimină</button></form>{% endif %}
+                        </div>
+                    </article>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state"><span class="empty-state__icon">↑</span><h2>Niciun fișier atașat</h2><p>Alege PDF-uri sau fotografii clare ale documentului.</p></div>
+            {% endif %}
+
+            {% if poate_atasa_fisiere %}
+                <form
+                    id="upload-form"
+                    data-init-url="{% url 'upload_initiere' document.id %}"
+                    data-copy-url="{% url 'document_copie_upload' document.id %}"
+                    data-batch-submit-url="{% url 'document_trimitere_lot' document.id %}"
+                    data-document-id="{{ document.id }}"
+                    data-detail-url="{% url 'document_detaliu' document.id %}"
+                    data-period-url="{% url 'perioada_detaliu' document.perioada_contabila_id %}"
+                    data-active-files="{{ numar_fisiere_active }}"
+                    style="margin-top: 1.1rem;"
+                >
+                    {% csrf_token %}
+
+                    {% if permite_incarcare_serie %}
+                        <fieldset class="upload-mode">
+                            <legend>Cum trebuie tratate fișierele selectate?</legend>
+                            <div class="upload-mode__grid">
+                                <label class="choice-card">
+                                    <input type="radio" name="upload_mode" value="separate"{% if not fisiere_active %} checked{% endif %}>
+                                    <span><strong>Documente separate</strong><small>Fiecare fișier este o factură, un bon sau un alt document distinct.</small></span>
+                                </label>
+                                <label class="choice-card">
+                                    <input type="radio" name="upload_mode" value="grouped"{% if fisiere_active %} checked{% endif %}>
+                                    <span><strong>Un singur document</strong><small>Fișierele sunt pagini sau părți ale aceluiași document.</small></span>
+                                </label>
+                            </div>
+                            <p class="helptext">Poți reveni oricând în dosarul lunar pentru o serie nouă. Un PDF nu este împărțit automat în documente.</p>
+                        </fieldset>
+                    {% endif %}
+
+                    <label for="upload-files">{% if fisiere_active %}Adaugă alte fișiere{% else %}Selectează fișierele{% endif %}</label>
+                    <input id="upload-files" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.heic,.heif,application/pdf,image/jpeg,image/png,image/heic,image/heif" required>
+                    <p id="upload-selection" class="helptext">PDF, JPG, PNG sau HEIC · maximum 25 MB per fișier · poți selecta mai multe odată</p>
+                    {% if fisiere_active %}
+                        <details class="disclosure"><summary>Înlocuiește un fișier existent</summary><div class="disclosure__box"><label for="replace-file">Fișierul înlocuit</label><select id="replace-file"><option value="">Nu înlocui; adaugă fișier nou</option>{% for fisier in fisiere_active %}<option value="{{ fisier.id }}">{{ fisier.nume_original|default:"Fișier" }} · versiunea {{ fisier.versiune }}</option>{% endfor %}</select><p class="helptext">Pentru înlocuire selectează un singur fișier nou.</p></div></details>
+                    {% endif %}
+
+                    {% if permite_incarcare_serie %}
+                        <label class="checkbox-row" for="upload-and-send">
+                            <input id="upload-and-send" type="checkbox" checked>
+                            <span><strong>Trimite contabilului după încărcare</strong><small>Debifează dacă vrei să păstrezi documentele ca ciorne.</small></span>
+                        </label>
+                    {% endif %}
+
+                    <div id="upload-progress-wrap" class="upload-progress" hidden>
+                        <div class="progress-meta"><span>Progresul seriei</span><strong id="upload-progress-label">0/0</strong></div>
+                        <progress id="upload-progress" value="0" max="1"></progress>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit"><span id="upload-action-label">Încarcă fișierele</span></button>
+                        <p id="upload-status" class="muted text-small" aria-live="polite"></p>
+                    </div>
+                    <div id="upload-results" class="upload-results" hidden>
+                        <p id="upload-results-title" class="upload-results__title"></p>
+                        <ul id="upload-results-list"></ul>
+                        <a id="upload-finish-link" class="btn btn--secondary btn--small" href="{% url 'perioada_detaliu' document.perioada_contabila_id %}">Revino la dosarul lunar</a>
+                    </div>
+                </form>
+            {% endif %}
+
+            {% if document.stare == "draft" and este_autor %}
+                <div class="form-actions" style="padding-top: 1rem; border-top: 1px solid var(--border);">
+                    {% if toate_fisierele_procesate %}<form method="post" action="{% url 'document_trimitere' document.id %}">{% csrf_token %}<button type="submit">Trimite contabilului</button></form>{% else %}<button type="button" disabled>Trimite contabilului</button><span class="muted text-small">{% if numar_fisiere_active %}Așteaptă procesarea tuturor fișierelor.{% else %}Încarcă mai întâi un fișier valid.{% endif %}</span>{% endif %}
+                </div>
+            {% endif %}
+        </section>
+
+        {% if poate_verifica and document.stare == "in_verificare" %}
+            <section id="verificare" class="panel">
+                <div class="panel-header"><div><p class="eyebrow">Pasul contabilului</p><h2>Validează datele documentului</h2></div></div>
+                <form method="post" action="{% url 'document_acceptare' document.id %}">
+                    {% csrf_token %}{{ formular_acceptare.non_field_errors }}
+                    <div class="form-grid">{% for field in formular_acceptare %}<div><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}</div>
+                    <div class="form-actions"><button type="submit">Acceptă documentul</button></div>
+                </form>
+                <details class="disclosure"><summary>Partenerul nu apare în listă</summary><div class="disclosure__box"><form method="post" action="{% url 'document_partener_nou' document.id %}">{% csrf_token %}<div class="form-grid">{% for field in formular_partener %}<div><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}</div><div class="form-actions"><button class="btn btn--secondary" type="submit">Creează partenerul</button></div></form></div></details>
+                <details class="disclosure"><summary>Cere clientului o clarificare</summary><div class="disclosure__box"><form method="post" action="{% url 'document_clarificare' document.id %}">{% csrf_token %}{{ formular_mesaj.as_p }}<div class="form-actions"><button type="submit">Trimite solicitarea</button></div></form></div></details>
+            </section>
+        {% endif %}
+
+        {% if document.stare == "necesita_clarificari" and user.rol == "client_admin" or document.stare == "necesita_clarificari" and user.rol == "client_operator" %}
+            <section id="raspunde" class="panel panel--accent">
+                <p class="eyebrow">Răspuns necesar</p><h2>Răspunde contabilului</h2>
+                <p class="muted text-small">Descrie ce ai corectat. Dacă ai înlocuit fișierul, menționează acest lucru în răspuns.</p>
+                <form method="post" action="{% url 'document_raspuns' document.id %}">{% csrf_token %}{{ formular_mesaj.as_p }}<div class="form-actions"><button type="submit">Retrimite documentul</button></div></form>
+            </section>
+        {% endif %}
+
+        <section class="panel">
+            <div class="panel-header"><div><p class="eyebrow">Colaborare</p><h2>Conversație</h2></div></div>
+            {% if comentarii %}<div class="conversation">{% for comentariu in comentarii %}<article class="conversation__item"><p class="conversation__author">{{ comentariu.autor_nume }} · {{ comentariu.creat_la|date:"j M, H:i" }}</p><p class="conversation__text">{{ comentariu.text }}</p></article>{% endfor %}</div>{% else %}<p class="muted">Nu există mesaje pentru acest document.</p>{% endif %}
+            {% if poate_comenta %}<form method="post" action="{% url 'document_comentariu' document.id %}" style="margin-top: 1rem;">{% csrf_token %}{{ formular_comentariu.as_p }}<div class="form-actions"><button class="btn btn--secondary" type="submit">Adaugă mesaj</button></div></form>{% endif %}
+        </section>
+    </div>
+
+    <aside class="stack">
+        <section class="panel panel--soft">
+            <p class="eyebrow">Detalii</p><h2>{{ document.tip_document.denumire }}</h2>
+            {% if document.predare_documente_id %}<p><span class="muted text-small">Proveniență</span><br><strong>Predare fizică · {{ document.predare_documente.get_metoda_display }}</strong></p>{% endif %}
+            {% if document.partener %}<p><span class="muted text-small">Partener</span><br><strong>{{ document.partener.denumire }}</strong></p>{% endif %}
+            {% if document.serie or document.numar %}<p><span class="muted text-small">Serie și număr</span><br><strong>{{ document.serie|default:"—" }} / {{ document.numar|default:"—" }}</strong></p>{% endif %}
+            {% if document.data_document %}<p><span class="muted text-small">Data documentului</span><br><strong>{{ document.data_document|date:"j F Y" }}</strong></p>{% endif %}
+            {% if document.valoare_totala %}<p><span class="muted text-small">Total</span><br><strong>{{ document.valoare_totala }} {{ document.moneda }}</strong></p>{% endif %}
+            {% if document.note %}<p class="text-small">{{ document.note }}</p>{% endif %}
+            {% if not document.partener and not document.serie and not document.numar and not document.valoare_totala %}<p class="muted text-small">Metadatele contabile vor fi completate în timpul verificării.</p>{% endif %}
+        </section>
+
+        {% if poate_reclasifica %}<section class="panel"><details class="disclosure"><summary>Corectează clasificarea</summary><div class="disclosure__box"><form method="post" action="{% url 'document_reclasificare' document.id %}">{% csrf_token %}{{ formular_reclasificare.as_p }}<div class="form-actions"><button class="btn btn--secondary" type="submit">Salvează clasificarea</button></div></form></div></details></section>{% endif %}
+
+        {% if poate_verifica and document.stare == "acceptat" %}
+            <section class="panel"><p class="eyebrow">Finalizare</p><h2>Document acceptat</h2><p class="muted text-small">Marchează-l procesat după ce datele au fost introduse sau exportate în sistemul contabil.</p><form method="post" action="{% url 'document_procesare' document.id %}">{% csrf_token %}<button class="btn btn--block" type="submit">Marchează procesat</button></form><details class="disclosure"><summary>Returnează în verificare</summary><div class="disclosure__box"><form method="post" action="{% url 'document_retur' document.id %}">{% csrf_token %}{{ formular_motiv.as_p }}<div class="form-actions"><button class="btn btn--secondary" type="submit">Returnează</button></div></form></div></details></section>
+        {% endif %}
+
+        <section class="panel">
+            <details class="disclosure"><summary>Istoricul documentului</summary><div class="disclosure__box timeline">{% for schimbare in istoric %}<div class="timeline__item"><p class="timeline__title">{{ schimbare.stare_veche|status_label }} → {{ schimbare.stare_noua|status_label }}</p><p class="timeline__meta">{{ schimbare.creat_la|date:"j F Y, H:i" }}{% if schimbare.comentariu %} · {{ schimbare.comentariu }}{% endif %}</p></div>{% empty %}<p class="muted text-small">Nicio schimbare înregistrată.</p>{% endfor %}</div></details>
+        </section>
+
+        {% if poate_anula or document.stare == "draft" and este_autor %}
+            <section class="danger-zone">
+                <details class="disclosure"><summary>Elimină sau anulează documentul</summary><div class="disclosure__box">
+                    {% if document.stare == "draft" and este_autor %}<form method="post" action="{% url 'document_stergere' document.id %}">{% csrf_token %}{{ formular_motiv.as_p }}<div class="form-actions"><button class="btn btn--danger" type="submit">Șterge ciorna</button></div></form>{% elif poate_anula %}<form method="post" action="{% url 'document_anulare' document.id %}">{% csrf_token %}{{ formular_motiv.as_p }}<div class="form-actions"><button class="btn btn--danger" type="submit">Anulează documentul</button></div></form>{% endif %}
+                </div></details>
+            </section>
+        {% endif %}
+    </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if poate_atasa_fisiere %}
+<script>
+(() => {
+    const form = document.getElementById("upload-form");
+    const input = document.getElementById("upload-files");
+    const status = document.getElementById("upload-status");
+    const replacement = document.getElementById("replace-file");
+    const sendAfterUpload = document.getElementById("upload-and-send");
+    const selection = document.getElementById("upload-selection");
+    const actionLabel = document.getElementById("upload-action-label");
+    const progressWrap = document.getElementById("upload-progress-wrap");
+    const progress = document.getElementById("upload-progress");
+    const progressLabel = document.getElementById("upload-progress-label");
+    const results = document.getElementById("upload-results");
+    const resultsTitle = document.getElementById("upload-results-title");
+    const resultsList = document.getElementById("upload-results-list");
+    const activeFiles = Number(form.dataset.activeFiles || "0");
+    const csrf = form.querySelector("input[name=csrfmiddlewaretoken]").value;
+    const currentTarget = {
+        documentId: form.dataset.documentId,
+        detailUrl: form.dataset.detailUrl,
+        initUrl: form.dataset.initUrl,
+    };
+
+    const jsonOrError = async (response) => {
+        let payload = {};
+        try { payload = await response.json(); } catch (_) {}
+        if (!response.ok) throw new Error(payload.error || `Încărcarea a eșuat (${response.status}).`);
+        return payload;
+    };
+
+    const selectedMode = () => form.querySelector("input[name=upload_mode]:checked")?.value || "grouped";
+    const updateSelection = () => {
+        const count = input.files.length;
+        const separate = selectedMode() === "separate" && !replacement?.value;
+        if (!count) {
+            selection.textContent = "PDF, JPG, PNG sau HEIC · maximum 25 MB per fișier · poți selecta mai multe odată";
+            actionLabel.textContent = "Încarcă fișierele";
+            return;
+        }
+        selection.textContent = separate
+            ? `${count} fișiere selectate → ${count} documente separate`
+            : `${count} fișiere selectate → un singur document`;
+        actionLabel.textContent = sendAfterUpload?.checked
+            ? `Încarcă și trimite ${separate ? `${count} documente` : "documentul"}`
+            : `Încarcă ${separate ? `${count} documente` : "fișierele"}`;
+    };
+
+    input.addEventListener("change", updateSelection);
+    replacement?.addEventListener("change", updateSelection);
+    sendAfterUpload?.addEventListener("change", updateSelection);
+    form.querySelectorAll("input[name=upload_mode]").forEach((radio) => radio.addEventListener("change", updateSelection));
+
+    const createCopy = async () => {
+        const payload = await jsonOrError(await fetch(form.dataset.copyUrl, {
+            method: "POST",
+            headers: {"X-CSRFToken": csrf},
+        }));
+        return {
+            documentId: payload.document_id,
+            detailUrl: payload.detail_url,
+            initUrl: payload.upload_init_url,
+        };
+    };
+
+    const uploadFile = async (target, file, index, total, replacementId = "") => {
+        status.textContent = `Pregătesc ${index}/${total}: ${file.name}`;
+        const params = new URLSearchParams({
+            nume: file.name,
+            content_type: file.type || "application/octet-stream",
+            dimensiune: String(file.size),
+        });
+        if (replacementId) params.set("inlocuieste_fisier_id", replacementId);
+        const intent = await jsonOrError(await fetch(target.initUrl, {
+            method: "POST",
+            headers: {"X-CSRFToken": csrf, "Content-Type": "application/x-www-form-urlencoded"},
+            body: params,
+        }));
+        status.textContent = `Încarc ${index}/${total}: ${file.name}`;
+        await jsonOrError(await fetch(intent.upload_url, {
+            method: intent.method,
+            headers: intent.headers,
+            body: file,
+        }));
+        status.textContent = `Verific ${index}/${total}: ${file.name}`;
+        const finalized = await jsonOrError(await fetch(intent.finalize_url, {
+            method: "POST",
+            headers: {"X-CSRFToken": csrf},
+        }));
+        if (finalized.stare_procesare !== "procesat") {
+            throw new Error(finalized.eroare || "Fișierul a fost încărcat, dar nu a putut fi procesat.");
+        }
+    };
+
+    const submitBatch = async (targets) => {
+        const params = new URLSearchParams();
+        targets.forEach((target) => params.append("document_ids", target.documentId));
+        await jsonOrError(await fetch(form.dataset.batchSubmitUrl, {
+            method: "POST",
+            headers: {"X-CSRFToken": csrf, "Content-Type": "application/x-www-form-urlencoded"},
+            body: params,
+        }));
+    };
+
+    const addResult = (file, ok, message, detailUrl) => {
+        const item = document.createElement("li");
+        item.className = ok ? "upload-result upload-result--success" : "upload-result upload-result--error";
+        const text = document.createElement("span");
+        text.textContent = `${ok ? "✓" : "!"} ${file.name} — ${message}`;
+        item.appendChild(text);
+        if (!ok && detailUrl) {
+            const link = document.createElement("a");
+            link.href = detailUrl;
+            link.textContent = "Reîncearcă";
+            item.appendChild(link);
+        }
+        resultsList.appendChild(item);
+    };
+
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const files = Array.from(input.files);
+        if (!files.length) return;
+        if (files.length > 500) {
+            status.textContent = "O serie poate conține cel mult 500 de fișiere. Împarte selecția în două serii.";
+            status.classList.add("error-text");
+            return;
+        }
+        if (replacement?.value && files.length !== 1) {
+            status.textContent = "Selectează un singur fișier atunci când înlocuiești o versiune.";
+            status.classList.add("error-text");
+            return;
+        }
+        const button = form.querySelector("button[type=submit]");
+        button.disabled = true;
+        status.classList.remove("error-text");
+        progressWrap.hidden = false;
+        results.hidden = false;
+        resultsList.replaceChildren();
+        progress.max = files.length;
+        progress.value = 0;
+        progressLabel.textContent = `0/${files.length}`;
+        let succeeded = 0;
+        let failed = 0;
+        let submitError = "";
+        const uploadedTargets = [];
+        const shouldSend = Boolean(sendAfterUpload?.checked);
+        const separate = selectedMode() === "separate" && !replacement?.value;
+
+        if (separate) {
+            for (let index = 0; index < files.length; index += 1) {
+                const file = files[index];
+                let target = null;
+                try {
+                    target = index > 0 || activeFiles > 0 ? await createCopy() : currentTarget;
+                    await uploadFile(target, file, index + 1, files.length);
+                    uploadedTargets.push(target);
+                    succeeded += 1;
+                    addResult(file, true, "încărcat și verificat", target.detailUrl);
+                } catch (error) {
+                    failed += 1;
+                    addResult(file, false, error.message, target?.detailUrl || form.dataset.periodUrl);
+                }
+                progress.value = index + 1;
+                progressLabel.textContent = `${index + 1}/${files.length}`;
+            }
+            if (shouldSend && uploadedTargets.length) {
+                try {
+                    status.textContent = `Trimit contabilului ${uploadedTargets.length} documente într-o singură serie.`;
+                    await submitBatch(uploadedTargets);
+                } catch (error) {
+                    submitError = error.message;
+                }
+            }
+        } else {
+            let groupFailed = false;
+            for (let index = 0; index < files.length; index += 1) {
+                const file = files[index];
+                try {
+                    await uploadFile(currentTarget, file, index + 1, files.length, replacement?.value || "");
+                    succeeded += 1;
+                    if (!uploadedTargets.length) uploadedTargets.push(currentTarget);
+                    addResult(file, true, "încărcat în document", currentTarget.detailUrl);
+                } catch (error) {
+                    failed += 1;
+                    groupFailed = true;
+                    addResult(file, false, error.message, currentTarget.detailUrl);
+                }
+                progress.value = index + 1;
+                progressLabel.textContent = `${index + 1}/${files.length}`;
+            }
+            if (shouldSend && !groupFailed) {
+                try {
+                    await submitBatch(uploadedTargets);
+                } catch (error) {
+                    submitError = error.message;
+                    status.textContent = `Fișierele sunt încărcate, dar trimiterea a eșuat: ${error.message}`;
+                    status.classList.add("error-text");
+                }
+            }
+        }
+
+        resultsTitle.textContent = submitError
+            ? `Fișierele sunt încărcate, dar seria a rămas în ciornă: ${submitError}`
+            : failed
+            ? `${succeeded} reușite${shouldSend ? " și trimise contabilului" : " și salvate ca ciorne"}, ${failed} cu probleme. Fișierele reușite nu trebuie încărcate din nou.`
+            : separate
+                ? `${succeeded} documente au fost ${shouldSend ? "trimise contabilului" : "salvate ca ciorne"}.`
+                : sendAfterUpload
+                    ? `Documentul cu ${succeeded} fișiere a fost ${shouldSend ? "trimis contabilului" : "salvat ca ciornă"}.`
+                    : `${succeeded} fișiere au fost adăugate documentului.`;
+        status.textContent = failed || submitError ? "Seria s-a încheiat cu unele erori." : "Seria a fost încărcată cu succes.";
+        if (failed || submitError) status.classList.add("error-text");
+        button.disabled = false;
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

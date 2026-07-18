@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Resetare parolă · Conta Saga{% endblock %}
+
+{% block content %}
+<section class="panel narrow">
+    {% include "includes/auth_brand.html" %}
+    <p class="eyebrow">Recuperare acces</p>
+    <h1>Resetare parolă</h1>
+    <p class="muted">Introdu adresa contului. Răspunsul este același indiferent dacă adresa există.</p>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <label for="{{ form.email.id_for_label }}">Email</label>
+        {{ form.email }}
+        {{ form.email.errors }}
+        <div class="form-actions"><button class="btn btn--block" type="submit">Trimite instrucțiunile</button></div>
+    </form>
+    <p class="text-small" style="margin-top: 1rem;"><a class="link" href="{% url 'login' %}">Înapoi la autentificare</a></p>
+</section>
+{% endblock %}

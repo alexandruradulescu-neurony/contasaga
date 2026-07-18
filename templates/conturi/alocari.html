@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Alocări contabili · Conta Saga{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb"><a href="{% url 'dashboard' %}">Acasă</a><span>/</span><span>Alocări</span></nav>
+<header class="page-header"><div class="page-header__copy"><p class="eyebrow">Responsabilitate internă</p><h1>Alocări contabili</h1><p class="lede">Controlează ce firme cliente poate vedea și procesa fiecare contabil.</p></div></header>
+<div class="content-grid content-grid--wide-aside">
+    <section class="panel">
+        <div class="panel-header"><div><p class="eyebrow">Acces curent</p><h2>{{ alocari|length }} alocări</h2></div></div>
+        {% if alocari %}<div class="document-list">{% for alocare in alocari %}<article class="document-row"><div><h3 class="document-row__title">{{ alocare.utilizator_afisat.nume }}</h3><p class="document-row__meta">{{ alocare.utilizator_afisat.email }}</p></div><div>{{ alocare.firma.denumire }}</div><div><span class="status status--primit">Contabil alocat</span></div><form method="post" action="{% url 'alocare_stergere' alocare.id %}">{% csrf_token %}<button class="btn btn--ghost btn--small" type="submit">Elimină</button></form></article>{% endfor %}</div>{% else %}<div class="empty-state"><span class="empty-state__icon">＋</span><h2>Nicio alocare internă</h2><p>Alocă un contabil unei firme pentru ca aceasta să apară în portofoliul lui.</p></div>{% endif %}
+    </section>
+    <aside class="panel"><p class="eyebrow">Alocare nouă</p><h2>Contabil și firmă</h2><form method="post">{% csrf_token %}{{ form.non_field_errors }}{% for field in form %}<label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}{% endfor %}<div class="form-actions"><button class="btn btn--block" type="submit">Creează alocarea</button></div></form></aside>
+</div>
+{% endblock %}

@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}{{ titlu }} · Conta Saga{% endblock %}
+{% block content %}
+<nav class="breadcrumb"><a href="{% url 'dashboard' %}">Acasă</a><span>/</span><span>{{ titlu }}</span></nav>
+<header class="page-header"><div class="page-header__copy"><p class="eyebrow">Portofoliu client</p><h1>{{ titlu }}</h1><p class="lede">Datele de identificare și contact folosite în dosarele contabile.</p></div></header>
+<section class="panel narrow"><form method="post">{% csrf_token %}{{ form.non_field_errors }}{% for field in form %}<label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}{% endfor %}<div class="form-actions"><button class="btn btn--block" type="submit">Salvează firma</button></div></form></section>
+{% endblock %}

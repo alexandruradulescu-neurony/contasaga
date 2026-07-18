@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}Schimbă parola · Conta Saga{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb"><a href="{% url 'dashboard' %}">Acasă</a><span>/</span><span>Cont</span></nav>
+<section class="panel narrow">
+    <p class="eyebrow">Securitatea contului</p>
+    <h1>Schimbă parola</h1>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="form-actions"><button class="btn btn--block" type="submit">Salvează parola</button></div>
+    </form>
+</section>
+{% endblock %}

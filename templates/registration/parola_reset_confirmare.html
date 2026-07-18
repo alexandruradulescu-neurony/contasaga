@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Parolă nouă · Conta Saga{% endblock %}
+
+{% block content %}
+<section class="panel narrow">
+    {% include "includes/auth_brand.html" %}
+    <h1>Setează parola nouă</h1>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="form-actions"><button class="btn btn--block" type="submit">Salvează parola</button></div>
+    </form>
+</section>
+{% endblock %}

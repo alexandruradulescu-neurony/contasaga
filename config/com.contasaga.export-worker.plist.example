@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.contasaga.export-worker</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PROJECT_DIR__/.venv/bin/python</string>
+        <string>__PROJECT_DIR__/manage.py</string>
+        <string>process_exports</string>
+        <string>--watch</string>
+        <string>--interval</string>
+        <string>5</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>__PROJECT_DIR__</string>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    <key>StandardOutPath</key>
+    <string>__PROJECT_DIR__/.local-logs/export-worker.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>__PROJECT_DIR__/.local-logs/export-worker.err.log</string>
+</dict>
+</plist>

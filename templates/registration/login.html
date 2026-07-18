@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Autentificare · Conta Saga{% endblock %}
+
+{% block content %}
+<section class="auth-shell">
+    <aside class="auth-aside">
+        <div class="brand"><span class="brand__mark">CS</span><span>Conta Saga</span></div>
+        <div>
+            <p class="eyebrow" style="color:#6ee7c6;">Documente contabile, fără haos</p>
+            <h1>Clientul și contabilul lucrează în același dosar.</h1>
+            <p>Documente organizate pe lună, solicitări clare și un istoric complet al fiecărei predări.</p>
+        </div>
+        <p class="text-small">Spațiu securizat pentru colaborarea cu firma ta de contabilitate.</p>
+    </aside>
+    <div class="auth-panel">
+        <div class="brand"><span class="brand__mark">CS</span><span>Conta Saga</span></div>
+        <p class="eyebrow">Bine ai revenit</p>
+        <h1>Intră în cont</h1>
+        <p class="muted">Folosește adresa de email asociată firmei tale.</p>
+        <form method="post">
+            {% csrf_token %}
+            {{ form.non_field_errors }}
+            <label for="{{ form.username.id_for_label }}">Email</label>{{ form.username }}{{ form.username.errors }}
+            <label for="{{ form.password.id_for_label }}">Parolă</label>{{ form.password }}{{ form.password.errors }}
+            {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+            <div class="form-actions"><button class="btn btn--block" type="submit">Intră în aplicație</button></div>
+        </form>
+        <p class="text-small" style="margin-top: 1rem;"><a class="link" href="{% url 'parola_reset_solicitare' %}">Ai uitat parola?</a></p>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Checklist · {{ firma.denumire }}{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb"><a href="{% url 'dashboard' %}">Acasă</a><span>/</span><span>{{ firma.denumire }}</span></nav>
+<header class="page-header">
+    <div class="page-header__copy"><p class="eyebrow">Configurare client</p><h1>Checklist lunar</h1><p class="lede">Stabilește ce documente trebuie să trimită {{ firma.denumire }} în fiecare lună.</p></div>
+    <div class="page-header__actions"><a class="btn btn--secondary" href="{% url 'perioade_firma' firma.id %}">Vezi dosarele lunare</a></div>
+</header>
+
+<div class="content-grid content-grid--wide-aside">
+    <div class="stack">
+        <section class="panel">
+            <div class="panel-header"><div><p class="eyebrow">Documente așteptate</p><h2>{{ configurari|length }} configurări</h2></div></div>
+            {% if configurari %}<div class="document-list">{% for configurare in configurari %}<article class="document-row"><div><h3 class="document-row__title">{{ configurare.tip_document.denumire }}</h3><p class="document-row__meta">{% if configurare.observatii %}{{ configurare.observatii }}{% else %}Fără instrucțiuni suplimentare{% endif %}</p></div><div>{{ configurare.get_frecventa_display }}{% if configurare.termen_predare_zi %} · până în ziua {{ configurare.termen_predare_zi }}{% endif %}</div><div><span class="status {% if configurare.activ and configurare.obligatoriu %}status--primit{% endif %}">{% if not configurare.activ %}Inactiv{% elif configurare.obligatoriu %}Obligatoriu{% else %}Opțional{% endif %}</span></div><span class="muted text-small">Selectează tipul în formular pentru editare</span></article>{% endfor %}</div>{% else %}<div class="empty-state"><span class="empty-state__icon">＋</span><h2>Checklist neconfigurat</h2><p>Adaugă documentele pe care le aștepți lunar de la acest client.</p></div>{% endif %}
+        </section>
+
+        <section class="panel">
+            <div class="panel-header"><div><p class="eyebrow">Trezorerie</p><h2>Conturi financiare</h2></div></div>
+            {% if conturi %}<div class="document-list">{% for cont in conturi %}<article class="document-row"><div><h3 class="document-row__title">{{ cont.denumire }}</h3><p class="document-row__meta">{% if cont.banca %}{{ cont.banca }}{% endif %}{% if cont.iban %} · {{ cont.iban }}{% endif %}</p></div><div>{{ cont.get_tip_display }}</div><div>{{ cont.moneda }}</div><span class="status {% if cont.activ %}status--primit{% endif %}">{% if cont.activ %}Activ{% else %}Inactiv{% endif %}</span></article>{% endfor %}</div>{% else %}<p class="muted">Nu există conturi financiare configurate.</p>{% endif %}
+        </section>
+    </div>
+
+    <aside class="stack">
+        <section class="panel">
+            <p class="eyebrow">Adaugă sau actualizează</p><h2>Tip de document</h2>
+            <p class="muted text-small">Dacă selectezi un tip existent, configurarea lui va fi actualizată.</p>
+            <form method="post">{% csrf_token %}<input type="hidden" name="actiune" value="configurare">{{ formular_config.non_field_errors }}{% for field in formular_config %}<label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}{{ field.errors }}{% endfor %}<div class="form-actions"><button class="btn btn--block" type="submit">Salvează în checklist</button></div></form>
+        </section>
+        <section class="panel">
+            <p class="eyebrow">Extras de cont</p><h2>Adaugă un cont financiar</h2>
+            <p class="muted text-small">Pentru fiecare cont activ se generează separat o cerință de extras.</p>
+            <form method="post">{% csrf_token %}<input type="hidden" name="actiune" value="cont">{{ formular_cont.non_field_errors }}{% for field in formular_cont %}<label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}{% endfor %}<div class="form-actions"><button class="btn btn--block" type="submit">Adaugă contul</button></div></form>
+        </section>
+    </aside>
+</div>
+{% endblock %}

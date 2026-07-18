@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}Link invalid · Conta Saga{% endblock %}
+
+{% block content %}
+<section class="panel narrow empty-state">
+    <span class="empty-state__icon">!</span>
+    <h1>Link invalid sau expirat</h1>
+    <p>Solicită un link nou de resetare a parolei.</p>
+    <div class="form-actions"><a class="btn" href="{% url 'parola_reset_solicitare' %}">Solicită alt link</a></div>
+</section>
+{% endblock %}

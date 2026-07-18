@@ -1,0 +1,103 @@
+from django.urls import path
+
+from .views import (
+    document_acceptare,
+    document_anulare,
+    document_clarificare,
+    document_comentariu,
+    document_copie_upload,
+    document_detaliu,
+    document_nou,
+    document_partener_nou,
+    document_preluare,
+    document_procesare,
+    document_raspuns,
+    document_reclasificare,
+    document_retur,
+    document_stergere,
+    document_trimitere,
+    document_trimitere_lot,
+    fisier_descarcare,
+    fisier_deschidere,
+    fisier_local_semnat,
+    fisier_stergere,
+    upload_finalizare,
+    upload_initiere,
+    upload_local_put,
+    verificare_documente,
+)
+
+urlpatterns = [
+    path("verificare/", verificare_documente, name="verificare_documente"),
+    path("perioade/<uuid:perioada_id>/documente/noi/", document_nou, name="document_nou"),
+    path("documente/<uuid:document_id>/", document_detaliu, name="document_detaliu"),
+    path(
+        "documente/<uuid:document_id>/copie-upload/",
+        document_copie_upload,
+        name="document_copie_upload",
+    ),
+    path("documente/<uuid:document_id>/trimite/", document_trimitere, name="document_trimitere"),
+    path(
+        "documente/<uuid:document_id>/trimite-lot/",
+        document_trimitere_lot,
+        name="document_trimitere_lot",
+    ),
+    path("documente/<uuid:document_id>/preia/", document_preluare, name="document_preluare"),
+    path(
+        "documente/<uuid:document_id>/reclasifica/",
+        document_reclasificare,
+        name="document_reclasificare",
+    ),
+    path(
+        "documente/<uuid:document_id>/clarificare/",
+        document_clarificare,
+        name="document_clarificare",
+    ),
+    path("documente/<uuid:document_id>/raspunde/", document_raspuns, name="document_raspuns"),
+    path("documente/<uuid:document_id>/accepta/", document_acceptare, name="document_acceptare"),
+    path(
+        "documente/<uuid:document_id>/parteneri/nou/",
+        document_partener_nou,
+        name="document_partener_nou",
+    ),
+    path("documente/<uuid:document_id>/proceseaza/", document_procesare, name="document_procesare"),
+    path("documente/<uuid:document_id>/returneaza/", document_retur, name="document_retur"),
+    path("documente/<uuid:document_id>/anuleaza/", document_anulare, name="document_anulare"),
+    path("documente/<uuid:document_id>/sterge/", document_stergere, name="document_stergere"),
+    path(
+        "documente/<uuid:document_id>/comentarii/",
+        document_comentariu,
+        name="document_comentariu",
+    ),
+    path(
+        "documente/<uuid:document_id>/upload/initiaza/",
+        upload_initiere,
+        name="upload_initiere",
+    ),
+    path(
+        "upload/<uuid:intentie_id>/local/",
+        upload_local_put,
+        name="upload_local_put",
+    ),
+    path(
+        "upload/<uuid:intentie_id>/finalizeaza/",
+        upload_finalizare,
+        name="upload_finalizare",
+    ),
+    path(
+        "fisiere/<uuid:fisier_id>/sterge/",
+        fisier_stergere,
+        name="fisier_stergere",
+    ),
+    path(
+        "fisiere/<uuid:fisier_id>/deschide/",
+        fisier_deschidere,
+        name="fisier_deschidere",
+    ),
+    path(
+        "fisiere/<uuid:fisier_id>/descarca/",
+        fisier_descarcare,
+        name="fisier_descarcare",
+    ),
+    path("fisiere/local/semnat/", fisier_local_semnat, name="fisier_local_semnat"),
+]

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Acceptă invitația · Conta Saga{% endblock %}
+
+{% block content %}
+<section class="panel narrow">
+    {% include "includes/auth_brand.html" %}
+    <p class="eyebrow">Invitație pentru {{ invitatie.email }}</p>
+    <h1>Acces la {{ invitatie.destinatie }}</h1>
+    <p>Rol: {{ invitatie.rol_afisat }}</p>
+
+    {% if cont_existent %}
+        <p>Invitația va adăuga această firmă contului tău existent.</p>
+        <form method="post">
+            {% csrf_token %}
+            <div class="form-actions"><button class="btn btn--block" type="submit">Acceptă invitația</button></div>
+        </form>
+    {% else %}
+        <form method="post">
+            {% csrf_token %}
+            {{ form.non_field_errors }}
+            {% for field in form %}
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {{ field.errors }}
+            {% endfor %}
+            <div class="form-actions"><button class="btn btn--block" type="submit">Creează contul</button></div>
+        </form>
+    {% endif %}
+</section>
+{% endblock %}

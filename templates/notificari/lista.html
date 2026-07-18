@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Notificări · Conta Saga{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb"><a href="{% url 'dashboard' %}">Acasă</a><span>/</span><span>Notificări</span></nav>
+<header class="page-header">
+    <div class="page-header__copy"><p class="eyebrow">Activitate</p><h1>Notificări</h1><p class="lede">Mesajele care necesită atenția ta și actualizările dosarelor.</p></div>
+    {% if numar_notificari_necitite %}<div class="page-header__actions"><form method="post" action="{% url 'citeste_toate_notificarile' %}">{% csrf_token %}<button class="btn btn--secondary" type="submit">Marchează toate citite</button></form></div>{% endif %}
+</header>
+
+<section class="panel">
+    <div class="panel-header">
+        <div class="segmented"><a href="{% url 'lista_notificari' %}"{% if not doar_necitite %} class="active"{% endif %}>Toate</a><a href="{% url 'lista_notificari' %}?stare=necitite"{% if doar_necitite %} class="active"{% endif %}>Necitite{% if numar_notificari_necitite %} · {{ numar_notificari_necitite }}{% endif %}</a></div>
+    </div>
+    {% if notificari %}<div class="notification-list">{% for notificare in notificari %}<article class="notification{% if not notificare.citita %} notification-unread{% endif %}"><span class="notification__dot" aria-hidden="true"></span><div><p class="eyebrow" style="margin-bottom:.2rem;">{{ notificare.get_tip_display }}</p><p style="margin-bottom:.25rem;"><strong>{{ notificare.mesaj }}</strong></p><p class="muted text-small">{{ notificare.creat_la|date:"j F Y, H:i" }}</p>{% if notificare.url_entitate %}<a class="link" href="{{ notificare.url_entitate }}">Deschide detaliile</a>{% endif %}</div>{% if not notificare.citita %}<form method="post" action="{% url 'citeste_notificare' notificare.id %}">{% csrf_token %}<button class="btn btn--ghost btn--small" type="submit">Marchează citită</button></form>{% endif %}</article>{% endfor %}</div>{% else %}<div class="empty-state"><span class="empty-state__icon">✓</span><h2>{% if doar_necitite %}Ești la zi{% else %}Nicio notificare{% endif %}</h2><p>{% if doar_necitite %}Nu ai mesaje necitite.{% else %}Actualizările importante vor apărea aici.{% endif %}</p></div>{% endif %}
+</section>
+{% endblock %}

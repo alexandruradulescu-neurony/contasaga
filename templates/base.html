@@ -1,0 +1,57 @@
+{% load static %}
+<!doctype html>
+<html lang="ro">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#103e34">
+    <title>{% block title %}Conta Saga{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    {% if user.is_authenticated %}
+    <header class="site-header">
+        <div class="site-header__inner">
+            <a class="brand" href="{% url 'dashboard' %}">
+                <span class="brand__mark" aria-hidden="true">CS</span>
+                <span>Conta Saga</span>
+            </a>
+            <nav class="primary-nav" aria-label="Navigație principală">
+                    <a class="primary-nav__link" href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} aria-current="page"{% endif %}>Acasă</a>
+                    {% if user.rol == "contabil" or user.rol == "contabil_coordonator" %}
+                        <a class="primary-nav__link" href="{% url 'verificare_documente' %}"{% if request.resolver_match.url_name == 'verificare_documente' %} aria-current="page"{% endif %}>De verificat</a>
+                    {% endif %}
+                    {% if user.rol == "admin_cabinet" %}
+                        <a class="primary-nav__link" href="{% url 'invitatii' %}"{% if request.resolver_match.url_name == 'invitatii' %} aria-current="page"{% endif %}>Utilizatori</a>
+                        <a class="primary-nav__link" href="{% url 'alocari' %}"{% if request.resolver_match.url_name == 'alocari' %} aria-current="page"{% endif %}>Alocări</a>
+                    {% elif user.rol == "client_admin" %}
+                        <a class="primary-nav__link" href="{% url 'invitatii' %}"{% if request.resolver_match.url_name == 'invitatii' %} aria-current="page"{% endif %}>Echipă</a>
+                    {% endif %}
+                    <a class="primary-nav__link" href="{% url 'lista_notificari' %}"{% if request.resolver_match.url_name == 'lista_notificari' %} aria-current="page"{% endif %}>
+                        Notificări{% if numar_notificari_necitite %} <span class="badge">{{ numar_notificari_necitite }}</span>{% endif %}
+                    </a>
+            </nav>
+            <div class="header-account">
+                    <div class="header-account__identity">
+                        <span class="header-account__name">{{ user.nume }}</span>
+                        <span class="header-account__role">{{ user.get_rol_display }}</span>
+                    </div>
+                    <a class="btn header-button" href="{% url 'parola_schimbare' %}">Cont</a>
+                    <form method="post" action="{% url 'logout' %}">
+                        {% csrf_token %}
+                        <button class="header-button" type="submit">Ieși</button>
+                    </form>
+            </div>
+        </div>
+    </header>
+    {% endif %}
+    <main class="app-main{% if not user.is_authenticated %} auth-main{% endif %}">
+        {% for message in messages %}
+            <div class="alert{% if message.tags %} alert--{{ message.tags }}{% endif %}" role="status">{{ message }}</div>
+        {% endfor %}
+        {% block content %}{% endblock %}
+    </main>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

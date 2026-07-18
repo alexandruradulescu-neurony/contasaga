@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% load ux %}
+
+{% block title %}Documente de verificat · Conta Saga{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb"><a href="{% url 'dashboard' %}">Acasă</a><span>/</span><span>De verificat</span></nav>
+
+<header class="page-header">
+    <div class="page-header__copy">
+        <p class="eyebrow">Spațiul contabilului</p>
+        <h1>Documente de verificat</h1>
+        <p class="lede">Documentele sunt ordonate după următoarea acțiune necesară, nu doar după data încărcării.</p>
+    </div>
+</header>
+
+<section class="metric-grid" aria-label="Rezumat coadă">
+    <article class="metric"><strong class="metric__value">{{ total_trimise }}</strong><span class="metric__label">noi, de preluat</span></article>
+    <article class="metric"><strong class="metric__value">{{ total_in_verificare }}</strong><span class="metric__label">în verificare</span></article>
+    <article class="metric"><strong class="metric__value">{{ total_clarificari }}</strong><span class="metric__label">așteaptă clientul</span></article>
+</section>
+
+<section class="panel" style="margin-bottom: 1rem;">
+    <details class="disclosure"{% if firma_selectata or stare_selectata or luna_selectata or an_selectat %} open{% endif %}>
+        <summary>Filtrează documentele</summary>
+        <div class="disclosure__box">
+            <form class="filter-bar" method="get">
+                <div><label for="firma">Firmă clientă</label><select id="firma" name="firma"><option value="">Toate firmele</option>{% for firma in firme %}<option value="{{ firma.id }}"{% if firma_selectata == firma.id|stringformat:"s" %} selected{% endif %}>{{ firma.denumire }}</option>{% endfor %}</select></div>
+                <div><label for="stare">Etapă</label><select id="stare" name="stare"><option value="">Toate etapele</option>{% for valoare, eticheta in stari %}<option value="{{ valoare }}"{% if stare_selectata == valoare %} selected{% endif %}>{{ eticheta }}</option>{% endfor %}</select></div>
+                <div><label for="luna">Lună</label><select id="luna" name="luna"><option value="">Toate</option>{% for numar in luni %}<option value="{{ numar }}"{% if luna_selectata == numar %} selected{% endif %}>{{ numar|luna_nume }}</option>{% endfor %}</select></div>
+                <div><label for="an">An</label><input id="an" name="an" type="number" min="2000" max="2200" value="{{ an_selectat|default_if_none:'' }}"></div>
+                <button class="btn" type="submit">Aplică</button>
+            </form>
+            {% if firma_selectata or stare_selectata or luna_selectata or an_selectat %}<p style="margin: .8rem 0 0;"><a class="link" href="{% url 'verificare_documente' %}">Șterge filtrele</a></p>{% endif %}
+        </div>
+    </details>
+</section>
+
+<section class="panel">
+    <div class="panel-header">
+        <div>
+            <p class="eyebrow">Coada curentă</p>
+            <h2>{{ total_filtrat }} documente{% if total_filtrat != total_coada %} filtrate din {{ total_coada }}{% else %} în flux{% endif %}</h2>
+        </div>
+        {% if total_acceptate %}<span class="status status--acceptat">{{ total_acceptate }} acceptate, de procesat</span>{% endif %}
+    </div>
+    {% if documente %}
+        <div class="document-list">
+            {% for document in documente %}
+                <article class="document-row">
+                    <div>
+                        <h3 class="document-row__title">{{ document.tip_document.denumire }}</h3>
+                        <p class="document-row__meta">{{ document.firma.denumire }} · {{ document.perioada_contabila.luna|luna_nume }} {{ document.perioada_contabila.an }}{% if document.predare_documente_id %} · digitizat din predare fizică{% endif %}</p>
+                    </div>
+                    <div>
+                        {% if document.partener %}<strong>{{ document.partener.denumire }}</strong><p class="document-row__meta">{% if document.serie or document.numar %}{{ document.serie|default:"" }} {{ document.numar|default:"" }}{% endif %}</p>{% elif document.cont_financiar %}<span>{{ document.cont_financiar.denumire }}</span>{% else %}<span class="muted text-small">Metadate necompletate</span>{% endif %}
+                    </div>
+                    <div><span class="status status--{{ document.stare }}">{{ document.get_stare_display }}</span></div>
+                    <a class="btn {% if document.stare == 'trimis' or document.stare == 'in_verificare' %}btn--primary{% else %}btn--secondary{% endif %} btn--small" href="{% url 'document_detaliu' document.id %}">{% if document.stare == "trimis" %}Preia documentul{% elif document.stare == "in_verificare" %}Continuă verificarea{% elif document.stare == "acceptat" %}Finalizează{% else %}Vezi conversația{% endif %}</a>
+                </article>
+            {% endfor %}
+        </div>
+        {% if documente.paginator.num_pages > 1 %}
+            <nav class="pagination" aria-label="Paginile cozii de verificare">
+                <span class="pagination__summary">Pagina {{ documente.number }} din {{ documente.paginator.num_pages }}</span>
+                <div class="pagination__actions">
+                    {% if documente.has_previous %}<a class="btn btn--secondary btn--small" href="{% querystring pagina=documente.previous_page_number %}">Înapoi</a>{% endif %}
+                    {% if documente.has_next %}<a class="btn btn--secondary btn--small" href="{% querystring pagina=documente.next_page_number %}">Înainte</a>{% endif %}
+                </div>
+            </nav>
+        {% endif %}
+    {% else %}
+        <div class="empty-state"><span class="empty-state__icon">✓</span><h2>Nu ai documente pentru aceste filtre</h2><p>Documentele noi trimise de clienți vor apărea aici.</p></div>
+    {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Invitație creată · Conta Saga{% endblock %}
+
+{% block content %}
+<section class="panel narrow">
+    <h1>Invitația a fost creată</h1>
+    {% if email_trimis %}
+        <p>Invitația a fost trimisă prin email. Linkul este afișat aici o singură dată.</p>
+    {% else %}
+        <div class="alert alert--error">Emailul nu a putut fi trimis. Copiază linkul acum sau retrimite invitația pentru a genera unul nou.</div>
+    {% endif %}
+    <label for="link-invitatie">Link de acceptare</label>
+    <input id="link-invitatie" type="text" value="{{ link_acceptare }}" readonly>
+    <div class="form-actions"><a class="btn" href="{% url 'invitatii' %}">Înapoi la invitații</a></div>
+</section>
+{% endblock %}

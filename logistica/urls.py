@@ -1,0 +1,61 @@
+from django.urls import path
+
+from .views import (
+    predare_digitizare_estimare,
+    predare_digitizare_finalizare,
+    predare_digitizare_incepe,
+    predare_digitizare_omite,
+    predare_digitizare_redeschidere,
+    predare_preluare,
+    predare_programare,
+    predare_receptie,
+    predare_returnare,
+)
+
+urlpatterns = [
+    path(
+        "perioade/<uuid:perioada_id>/predari/programeaza/",
+        predare_programare,
+        name="predare_programare",
+    ),
+    path(
+        "predari/<uuid:predare_id>/preia/",
+        predare_preluare,
+        name="predare_preluare",
+    ),
+    path(
+        "predari/<uuid:predare_id>/receptioneaza/",
+        predare_receptie,
+        name="predare_receptie",
+    ),
+    path(
+        "predari/<uuid:predare_id>/returneaza/",
+        predare_returnare,
+        name="predare_returnare",
+    ),
+    path(
+        "predari/<uuid:predare_id>/digitizare/incepe/",
+        predare_digitizare_incepe,
+        name="predare_digitizare_incepe",
+    ),
+    path(
+        "predari/<uuid:predare_id>/digitizare/omite/",
+        predare_digitizare_omite,
+        name="predare_digitizare_omite",
+    ),
+    path(
+        "predari/<uuid:predare_id>/digitizare/estimare/",
+        predare_digitizare_estimare,
+        name="predare_digitizare_estimare",
+    ),
+    path(
+        "predari/<uuid:predare_id>/digitizare/finalizeaza/",
+        predare_digitizare_finalizare,
+        name="predare_digitizare_finalizare",
+    ),
+    path(
+        "predari/<uuid:predare_id>/digitizare/redeschide/",
+        predare_digitizare_redeschidere,
+        name="predare_digitizare_redeschidere",
+    ),
+]

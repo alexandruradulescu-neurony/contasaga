@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}Invitație indisponibilă · Conta Saga{% endblock %}
+
+{% block content %}
+<section class="panel narrow">
+    {% include "includes/auth_brand.html" %}
+    <h1>Invitația nu poate fi folosită</h1>
+    <p>{{ mesaj }}</p>
+    <div class="form-actions"><a class="btn btn--block" href="{% url 'login' %}">Autentificare</a></div>
+</section>
+{% endblock %}

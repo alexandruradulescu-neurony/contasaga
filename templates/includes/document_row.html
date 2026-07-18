@@ -1,0 +1,14 @@
+<article class="document-row">
+    <div>
+        <h3 class="document-row__title">{{ document.tip_document.denumire }}</h3>
+        <p class="document-row__meta">
+            {% if document.cont_financiar %}{{ document.cont_financiar.denumire }} · {% endif %}
+            {{ document.numar_fisiere_active }} fișier{% if document.numar_fisiere_active != 1 %}e{% endif %} · creat {{ document.creat_la|date:"j M, H:i" }}
+        </p>
+    </div>
+    <div>
+        {% if document.partener %}<strong>{{ document.partener.denumire }}</strong>{% else %}<span class="muted text-small">Metadate în curs</span>{% endif %}
+    </div>
+    <div><span class="status status--{{ document.stare }}">{{ document.get_stare_display }}</span></div>
+    <a class="btn {% if document.stare == 'draft' or document.stare == 'necesita_clarificari' %}btn--primary{% else %}btn--secondary{% endif %} btn--small" href="{% url 'document_detaliu' document.id %}">{% if document.stare == "draft" %}Continuă uploadul{% elif document.stare == "necesita_clarificari" %}Răspunde{% else %}Deschide{% endif %}</a>
+</article>

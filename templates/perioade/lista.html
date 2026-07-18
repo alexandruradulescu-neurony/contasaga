@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Dosare lunare · {{ firma.denumire }}{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb" aria-label="Navigație secundară">
+    <a href="{% url 'dashboard' %}">Acasă</a><span aria-hidden="true">/</span><span>{{ firma.denumire }}</span>
+</nav>
+
+<header class="page-header">
+    <div class="page-header__copy">
+        <p class="eyebrow">{{ firma.denumire }} · CUI {{ firma.cui }}</p>
+        <h1>Dosare lunare</h1>
+        <p class="lede">Fiecare dosar adună documentele, solicitările și progresul unei luni contabile.</p>
+    </div>
+    {% if poate_deschide %}
+        <div class="page-header__actions">
+            <a class="btn" href="#deschide-perioada">Deschide o lună nouă</a>
+        </div>
+    {% endif %}
+</header>
+
+<div class="content-grid">
+    <section class="panel">
+        <div class="panel-header">
+            <div>
+                <p class="eyebrow">Istoric și lucru curent</p>
+                <h2>{{ perioade|length }} dosare</h2>
+            </div>
+        </div>
+        {% if perioade %}
+            <div class="client-list">
+                {% for perioada in perioade %}
+                    <article class="client-row">
+                        <div>
+                            <h2 class="client-row__name">{{ perioada.luna|stringformat:"02d" }}/{{ perioada.an }}</h2>
+                            <p class="client-row__meta">{% if perioada.termen_predare %}Termen {{ perioada.termen_predare|date:"j F Y" }}{% else %}Fără termen stabilit{% endif %}</p>
+                        </div>
+                        <div>
+                            <div class="progress-meta"><span>Checklist</span><strong>{{ perioada.cerinte_complete }}/{{ perioada.cerinte_total }}</strong></div>
+                            <div class="progress"><span class="progress__bar" style="width: {{ perioada.progres }}%"></span></div>
+                        </div>
+                        <div>
+                            <span class="status status--{{ perioada.stare }}">{{ perioada.get_stare_display }}</span>
+                            {% if perioada.responsabil_afisat %}<p class="client-row__meta">{{ perioada.responsabil_afisat.nume }}</p>{% endif %}
+                        </div>
+                        <div class="client-row__action">
+                            <a class="btn btn--secondary btn--small" href="{% url 'perioada_detaliu' perioada.id %}">Deschide dosarul</a>
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <span class="empty-state__icon">＋</span>
+                <h2>Niciun dosar lunar</h2>
+                <p>{% if poate_deschide %}Deschide prima lună pentru a genera checklist-ul clientului.{% else %}Contabilul nu a deschis încă o perioadă pentru această firmă.{% endif %}</p>
+            </div>
+        {% endif %}
+    </section>
+
+    <aside class="stack">
+        <section class="panel panel--soft">
+            <p class="eyebrow">Firmă clientă</p>
+            <h2>{{ firma.denumire }}</h2>
+            <p class="muted text-small">CUI {{ firma.cui }}{% if firma.email_contact %}<br>{{ firma.email_contact }}{% endif %}</p>
+            {% if user.rol == "admin_cabinet" %}
+                <a class="btn btn--secondary btn--block" href="{% url 'configurare_firma' firma.id %}">Configurează checklist-ul</a>
+            {% endif %}
+        </section>
+
+        {% if poate_deschide %}
+            <section id="deschide-perioada" class="panel">
+                <p class="eyebrow">Dosar nou</p>
+                <h2>Deschide o lună</h2>
+                <p class="muted text-small">Checklist-ul configurat pentru client va fi generat automat.</p>
+                <form method="post">
+                    {% csrf_token %}
+                    {{ formular.non_field_errors }}
+                    {% for field in formular %}
+                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}{{ field.errors }}
+                    {% endfor %}
+                    <div class="form-actions"><button class="btn btn--block" type="submit">Deschide dosarul</button></div>
+                </form>
+            </section>
+        {% endif %}
+    </aside>
+</div>
+{% endblock %}

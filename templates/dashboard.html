@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Acasă · Conta Saga{% endblock %}
+
+{% block content %}
+<header class="page-header">
+    <div class="page-header__copy">
+        <p class="eyebrow">{% if firma_contabilitate %}{{ firma_contabilitate.denumire }}{% elif este_client %}Portal client{% else %}Conta Saga{% endif %}</p>
+        {% if este_contabil %}
+            <h1>Bună, {{ user.get_short_name }}. Ce verificăm astăzi?</h1>
+            <p class="lede">Ai aici portofoliul de clienți și documentele care așteaptă intervenția ta.</p>
+        {% elif este_client %}
+            <h1>Documentele firmelor tale</h1>
+            <p class="lede">Vezi ce documente mai sunt necesare și trimite-le direct contabilului.</p>
+        {% elif user.rol == "admin_cabinet" %}
+            <h1>Firmele tale cliente</h1>
+            <p class="lede">Configurează dosarele lunare, echipa și accesul la fiecare client.</p>
+        {% else %}
+            <h1>Bun venit, {{ user.nume }}</h1>
+            <p class="lede">Alege o firmă pentru a continua.</p>
+        {% endif %}
+    </div>
+    <div class="page-header__actions">
+        {% if este_contabil %}
+            <a class="btn" href="{% url 'verificare_documente' %}">Deschide coada de verificare</a>
+        {% elif user.rol == "admin_cabinet" %}
+            <a class="btn btn--secondary" href="{% url 'invitatii' %}">Gestionează utilizatori</a>
+            <a class="btn" href="{% url 'firma_noua' %}">Adaugă firmă clientă</a>
+        {% elif user.rol == "client_admin" %}
+            <a class="btn btn--secondary" href="{% url 'invitatii' %}">Invită un coleg</a>
+        {% endif %}
+    </div>
+</header>
+
+{% if firme %}
+    <section class="metric-grid" aria-label="Rezumat">
+        <article class="metric">
+            <strong class="metric__value">{{ firme|length }}</strong>
+            <span class="metric__label">firm{% if firme|length == 1 %}ă{% else %}e{% endif %} la care ai acces</span>
+        </article>
+        <article class="metric">
+            <strong class="metric__value">{{ dosare_active }}</strong>
+            <span class="metric__label">dosare lunare active</span>
+        </article>
+        <article class="metric">
+            {% if este_contabil %}
+                <strong class="metric__value">{{ documente_de_verificat }}</strong>
+                <span class="metric__label">documente de verificat</span>
+            {% elif este_client %}
+                <strong class="metric__value">{{ clarificari_de_rezolvat }}</strong>
+                <span class="metric__label">clarificări care cer răspuns</span>
+            {% else %}
+                <strong class="metric__value">{{ firme|length }}</strong>
+                <span class="metric__label">firme cliente configurate</span>
+            {% endif %}
+        </article>
+    </section>
+
+    <section>
+        <div class="panel-header">
+            <div>
+                <p class="eyebrow">Portofoliu</p>
+                <h2>{% if este_client %}Alege firma pentru care trimiți documente{% else %}Situația clienților{% endif %}</h2>
+            </div>
+        </div>
+        <div class="client-list">
+            {% for firma in firme %}
+                <article class="client-row">
+                    <div>
+                        <h2 class="client-row__name">{{ firma.denumire }}</h2>
+                        <p class="client-row__meta">CUI {{ firma.cui }}{% if not firma.activa %} · firmă inactivă{% endif %}</p>
+                    </div>
+                    <div>
+                        {% if firma.perioada_curenta %}
+                            <div class="progress-meta">
+                                <span>Dosar {{ firma.perioada_curenta.luna|stringformat:"02d" }}/{{ firma.perioada_curenta.an }}</span>
+                                <strong>{{ firma.cerinte_complete }}/{{ firma.cerinte_total }}</strong>
+                            </div>
+                            <div class="progress" aria-label="Progres {{ firma.progres }}%">
+                                <span class="progress__bar" style="width: {{ firma.progres }}%"></span>
+                            </div>
+                        {% else %}
+                            <p class="client-row__meta">Nu există încă un dosar lunar.</p>
+                        {% endif %}
+                    </div>
+                    <div>
+                        {% if firma.perioada_curenta %}
+                            <span class="status status--{{ firma.perioada_curenta.stare }}">{{ firma.perioada_curenta.get_stare_display }}</span>
+                            {% if este_contabil and firma.documente_de_lucrat %}<p class="client-row__meta">{{ firma.documente_de_lucrat }} documente în flux</p>{% endif %}
+                        {% else %}
+                            <span class="status">Fără perioadă</span>
+                        {% endif %}
+                    </div>
+                    <div class="client-row__action">
+                        {% if firma.perioada_curenta %}
+                            <a class="btn btn--secondary btn--small" href="{% url 'perioada_detaliu' firma.perioada_curenta.id %}">{% if este_client %}Continuă dosarul{% else %}Deschide dosarul{% endif %}</a>
+                        {% else %}
+                            <a class="btn btn--secondary btn--small" href="{% url 'perioade_firma' firma.id %}">Vezi perioadele</a>
+                        {% endif %}
+                        {% if user.rol == "admin_cabinet" %}
+                            <a class="btn btn--ghost btn--small" href="{% url 'configurare_firma' firma.id %}">Checklist</a>
+                        {% endif %}
+                    </div>
+                </article>
+            {% endfor %}
+        </div>
+    </section>
+{% elif user.is_superuser %}
+    <section class="panel empty-state">
+        <span class="empty-state__icon">↗</span>
+        <h2>Administrarea platformei este separată</h2>
+        <p>Folosește Admin-ul platformei pentru a gestiona firmele de contabilitate.</p>
+    </section>
+{% else %}
+    <section class="panel empty-state">
+        <span class="empty-state__icon">0</span>
+        <h2>Nu ai încă acces la nicio firmă</h2>
+        <p>Administratorul sau contabilul tău trebuie să îți acorde acces.</p>
+    </section>
+{% endif %}
+{% endblock %}
