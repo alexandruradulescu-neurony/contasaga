@@ -1,6 +1,9 @@
 from unittest.mock import patch
 
+from django.http import HttpResponse
+from django.middleware.security import SecurityMiddleware
 from django.test import RequestFactory, SimpleTestCase
+from django.test.utils import override_settings
 
 from core.views import health_live, health_ready
 
@@ -31,3 +34,16 @@ class HealthEndpointTests(SimpleTestCase):
             response.content,
             {"status": "unavailable", "checks": {"database": True, "storage": False}},
         )
+
+    @override_settings(
+        SECURE_SSL_REDIRECT=True,
+        SECURE_REDIRECT_EXEMPT=[r"^health/(?:live/|ready/)?$"],
+    )
+    def test_internal_health_probe_is_not_redirected_to_https(self):
+        middleware = SecurityMiddleware(lambda _request: HttpResponse("ok"))
+
+        health_response = middleware(RequestFactory().get("/health/ready/"))
+        application_response = middleware(RequestFactory().get("/dashboard/"))
+
+        self.assertEqual(health_response.status_code, 200)
+        self.assertEqual(application_response.status_code, 301)
