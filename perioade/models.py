@@ -13,6 +13,7 @@ class PerioadaContabila(models.Model):
         DOCUMENTE_INCOMPLETE = "documente_incomplete", "Documente incomplete"
         GATA_PENTRU_VERIFICARE = "gata_pentru_verificare", "Gata pentru verificare"
         IN_LUCRU = "in_lucru", "În lucru"
+        INCHIDERE_IN_CURS = "inchidere_in_curs", "În curs de închidere"
         INCHISA = "inchisa", "Închisă"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

@@ -356,6 +356,79 @@ check "T93: triggerul nu permite mai multe fișiere decât declară lotul" "1" "
 R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); INSERT INTO loturi_incarcare (firma_id,perioada_contabila_id,creat_de,numar_fisiere_declarat,dimensiune_totala_declarata) VALUES ('$FIRMA_A','$PERIOADA_A','$CLIENT_ID',501,1024); ROLLBACK;" 2>&1 | grep -c "chk_lot_numar_fisiere")
 check "T94: baza impune limita maximă a lotului" "1" "$R"
 
+# ------------------------------------------------ analiza AI + revizuire umana
+R=$($WORKER -c "SELECT count(*) FROM analize_fisiere_inbox WHERE fisier_inbox_id='71000000-0000-0000-0000-000000000001';")
+check "T95: publicarea fisierului programeaza automat analiza" "1" "$R"
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); SELECT count(*) FROM analize_fisiere_inbox WHERE fisier_inbox_id='71000000-0000-0000-0000-000000000001'; ROLLBACK;" | num)
+check "T96: analiza este vizibila in tenantul propriu" "1" "$R"
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$BETA_ID',true); SELECT count(*) FROM analize_fisiere_inbox WHERE fisier_inbox_id='71000000-0000-0000-0000-000000000001'; ROLLBACK;" | num)
+check "T97: analiza AI este izolata de celalalt cabinet" "0" "$R"
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); UPDATE analize_fisiere_inbox SET status='finalizata' WHERE fisier_inbox_id='71000000-0000-0000-0000-000000000001'; ROLLBACK;" 2>&1 | grep -c "permission denied")
+check "T98: app_user nu poate modifica sugestia modelului" "1" "$R"
+R=$($WORKER -c "UPDATE analize_fisiere_inbox SET status='in_lucru',procesare_inceputa_la=NULL WHERE fisier_inbox_id='71000000-0000-0000-0000-000000000001';" 2>&1 | grep -c "chk_analiza_lease")
+check "T99: analiza in lucru necesita lease activ" "1" "$R"
+R=$($WORKER -c "UPDATE analize_fisiere_inbox SET status='finalizata',provider='test',model='test',tip_document_sugerat_id=(SELECT id FROM tipuri_document ORDER BY cod LIMIT 1),incredere=0.8750,finalizata_la=now() WHERE fisier_inbox_id='71000000-0000-0000-0000-000000000001' RETURNING 1;" 2>&1 | grep -c "^1$")
+check "T100: workerul poate salva o sugestie structurata" "1" "$R"
+R=$($WORKER -c "UPDATE analize_fisiere_inbox SET status_revizuire='ignorata',revizuita_de='$ANA_ID',revizuita_la=now(),observatii_revizuire='Fisier fara relevanta contabila' WHERE fisier_inbox_id='71000000-0000-0000-0000-000000000001' RETURNING 1;" 2>&1 | grep -c "^1$")
+check "T101: revizuirea umana ignorata pastreaza trasabilitatea" "1" "$R"
+
+# ------------------------------------------------ OCR pagini + derivari
+R=$($WORKER -c "UPDATE analize_fisiere_inbox SET status_citire='in_lucru',citire_inceputa_la=NULL WHERE fisier_inbox_id='71000000-0000-0000-0000-000000000001';" 2>&1 | grep -c "chk_analiza_lease_citire")
+check "T102: citirea in lucru necesita lease activ" "1" "$R"
+R=$($WORKER -c "UPDATE analize_fisiere_inbox SET status_citire='finalizata',citire_finalizata_la=now(),metoda_citire='text_pdf',numar_pagini=1 WHERE fisier_inbox_id='71000000-0000-0000-0000-000000000001' RETURNING 1;" 2>&1 | grep -c "^1$")
+check "T103: workerul poate finaliza citirea coerenta" "1" "$R"
+$WORKER -c "INSERT INTO pagini_fisiere_inbox (id,analiza_id,fisier_inbox_id,firma_id,perioada_contabila_id,numar_pagina,metoda,text_extras,preview_storage_key,preview_checksum,latime_preview,inaltime_preview) VALUES ('72000000-0000-0000-0000-000000000001',(SELECT id FROM analize_fisiere_inbox WHERE fisier_inbox_id='71000000-0000-0000-0000-000000000001'),'71000000-0000-0000-0000-000000000001','$FIRMA_A','$PERIOADA_A',1,'text_pdf','Factura 100','clients/$FIRMA_A/2026-06/inbox/70000000-0000-0000-0000-000000000001/previews/71000000-0000-0000-0000-000000000001/0001.png',repeat('b',64),800,1200);" > /dev/null 2>&1
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); SELECT count(*) FROM pagini_fisiere_inbox WHERE id='72000000-0000-0000-0000-000000000001'; ROLLBACK;" | num)
+check "T104: pagina OCR este vizibila in tenantul propriu" "1" "$R"
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$BETA_ID',true); SELECT count(*) FROM pagini_fisiere_inbox WHERE id='72000000-0000-0000-0000-000000000001'; ROLLBACK;" | num)
+check "T105: pagina OCR este izolata de alt cabinet" "0" "$R"
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); INSERT INTO pagini_fisiere_inbox (analiza_id,fisier_inbox_id,firma_id,perioada_contabila_id,numar_pagina,metoda,preview_storage_key,preview_checksum,latime_preview,inaltime_preview) VALUES ((SELECT id FROM analize_fisiere_inbox WHERE fisier_inbox_id='71000000-0000-0000-0000-000000000001'),'71000000-0000-0000-0000-000000000001','$FIRMA_A','$PERIOADA_A',2,'fara_text','atac',repeat('x',64),1,1); ROLLBACK;" 2>&1 | grep -c "permission denied")
+check "T106: app_user nu poate fabrica pagini OCR" "1" "$R"
+
+$WORKER -c "INSERT INTO derivari_fisiere_inbox (id,analiza_id,fisier_inbox_id,fisier_document_id,document_id,firma_id,perioada_contabila_id,pagina_start,pagina_sfarsit,metoda,checksum_sursa,checksum_derivat,creat_de) VALUES ('73000000-0000-0000-0000-000000000001',(SELECT id FROM analize_fisiere_inbox WHERE fisier_inbox_id='71000000-0000-0000-0000-000000000001'),'71000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','$FIRMA_A','$PERIOADA_A',1,1,'copie_integrala',repeat('a',64),repeat('c',64),'$ANA_ID');" > /dev/null 2>&1
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); SELECT count(*) FROM derivari_fisiere_inbox WHERE id='73000000-0000-0000-0000-000000000001'; ROLLBACK;" | num)
+check "T107: derivarea este vizibila in tenantul propriu" "1" "$R"
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$BETA_ID',true); SELECT count(*) FROM derivari_fisiere_inbox WHERE id='73000000-0000-0000-0000-000000000001'; ROLLBACK;" | num)
+check "T108: derivarea este izolata de alt cabinet" "0" "$R"
+R=$($WORKER -c "INSERT INTO derivari_fisiere_inbox (analiza_id,fisier_inbox_id,fisier_document_id,document_id,firma_id,perioada_contabila_id,pagina_start,pagina_sfarsit,metoda,checksum_sursa,checksum_derivat,creat_de) VALUES ((SELECT id FROM analize_fisiere_inbox WHERE fisier_inbox_id='71000000-0000-0000-0000-000000000001'),'71000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','$FIRMA_A','$PERIOADA_A',1,1,'copie_integrala',repeat('a',64),repeat('c',64),'$ANA_ID');" 2>&1 | grep -c "fk_derivare_fisier")
+check "T109: derivarea nu poate lega fisierul altui tenant" "1" "$R"
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); INSERT INTO derivari_fisiere_inbox (analiza_id,fisier_inbox_id,fisier_document_id,document_id,firma_id,perioada_contabila_id,pagina_start,pagina_sfarsit,metoda,checksum_sursa,checksum_derivat,creat_de) VALUES ((SELECT id FROM analize_fisiere_inbox WHERE fisier_inbox_id='71000000-0000-0000-0000-000000000001'),'71000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','$FIRMA_A','$PERIOADA_A',1,1,'copie_integrala',repeat('a',64),repeat('c',64),'$ANA_ID'); ROLLBACK;" 2>&1 | grep -c "permission denied")
+check "T110: app_user nu poate fabrica derivari" "1" "$R"
+
+# ------------------------------------------------ extragere structurata + arhiva lunara
+$WORKER -c "INSERT INTO extractii_structurate_documente (id,document_id,fisier_document_id,firma_id,perioada_contabila_id,status,provider,model,finalizata_la,checksum_sursa,fisiere_sursa,campuri_sugerate,incredere) VALUES ('74000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','$FIRMA_A','$PERIOADA_A','finalizata','test','test',now(),repeat('d',64),'[\"20000000-0000-0000-0000-000000000001\"]','{\"number\":\"100\"}',0.9);" > /dev/null 2>&1
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); SELECT count(*) FROM extractii_structurate_documente WHERE id='74000000-0000-0000-0000-000000000001'; ROLLBACK;" | num)
+check "T111: extractia structurata este vizibila in tenant" "1" "$R"
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$BETA_ID',true); SELECT count(*) FROM extractii_structurate_documente WHERE id='74000000-0000-0000-0000-000000000001'; ROLLBACK;" | num)
+check "T112: extractia structurata este izolata de alt cabinet" "0" "$R"
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$ANA_ID',true); UPDATE extractii_structurate_documente SET campuri_sugerate='{\"number\":\"atac\"}' WHERE id='74000000-0000-0000-0000-000000000001'; ROLLBACK;" 2>&1 | grep -c "permission denied")
+check "T113: app_user nu poate rescrie sugestiile extrase" "1" "$R"
+R=$($WORKER -c "INSERT INTO extractii_structurate_documente (document_id,fisier_document_id,firma_id,perioada_contabila_id,checksum_sursa) VALUES ('10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','$FIRMA_A','$PERIOADA_A',repeat('e',64));" 2>&1 | grep -c "fk_extractie_fisier")
+check "T114: extractia nu poate folosi fisierul altui tenant" "1" "$R"
+R=$($WORKER -c "UPDATE extractii_structurate_documente SET status='in_lucru',procesare_inceputa_la=NULL WHERE id='74000000-0000-0000-0000-000000000001';" 2>&1 | grep -c "chk_extractie_lease")
+check "T115: lease-ul extragerii structurate este obligatoriu" "1" "$R"
+R=$($WORKER -c "UPDATE extractii_structurate_documente SET status_revizuire='confirmata',revizuita_de=NULL,revizuita_la=now() WHERE id='74000000-0000-0000-0000-000000000001';" 2>&1 | grep -c "chk_extractie_revizuire_coerenta")
+check "T116: revizuirea extragerii cere actor si data" "1" "$R"
+
+$WORKER -c "INSERT INTO arhive_lunare (id,firma_id,perioada_contabila_id,versiune,prefix_staging,prefix_final,solicitata_de) VALUES ('75000000-0000-0000-0000-000000000001','$FIRMA_A','$PERIOADA_A',1,'clients/$FIRMA_A/2026-06/.system/staging/archive-v0001','clients/$FIRMA_A/2026-06/archive/v0001','$ANA_ID');" > /dev/null 2>&1
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); SELECT count(*) FROM arhive_lunare WHERE id='75000000-0000-0000-0000-000000000001'; ROLLBACK;" | num)
+check "T117: arhiva lunara este vizibila in tenant" "1" "$R"
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$BETA_ID',true); SELECT count(*) FROM arhive_lunare WHERE id='75000000-0000-0000-0000-000000000001'; ROLLBACK;" | num)
+check "T118: arhiva lunara este izolata de alt cabinet" "0" "$R"
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$ANA_ID',true); UPDATE arhive_lunare SET status='finalizata',manifest_storage_key='atac',manifest_checksum=repeat('x',64),finalizata_la=now() WHERE id='75000000-0000-0000-0000-000000000001'; ROLLBACK;" 2>&1 | grep -c "permission denied")
+check "T119: app_user nu poate falsifica publicarea arhivei" "1" "$R"
+R=$($WORKER -c "UPDATE arhive_lunare SET status='in_lucru',procesare_inceputa_la=NULL WHERE id='75000000-0000-0000-0000-000000000001';" 2>&1 | grep -c "chk_arhiva_lease")
+check "T120: arhiva in lucru necesita lease activ" "1" "$R"
+$WORKER -c "UPDATE arhive_lunare SET status='finalizata',manifest_storage_key='clients/$FIRMA_A/2026-06/archive/v0001/.system/manifest.csv',manifest_checksum=repeat('f',64),finalizata_la=now() WHERE id='75000000-0000-0000-0000-000000000001'; INSERT INTO fisiere_arhiva_lunara (id,arhiva_id,document_id,fisier_document_id,firma_id,perioada_contabila_id,ordine,categorie,cale_relativa,storage_key_sursa,storage_key_arhiva,nume_original,checksum_sursa,checksum_arhiva,dimensiune_bytes) VALUES ('76000000-0000-0000-0000-000000000001','75000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','$FIRMA_A','$PERIOADA_A',1,'primite/bon-consum','primite/bon-consum/0001__bon.pdf','source','clients/$FIRMA_A/2026-06/archive/v0001/primite/bon-consum/0001__bon.pdf','bon.pdf',repeat('a',64),repeat('a',64),100);" > /dev/null 2>&1
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); SELECT count(*) FROM fisiere_arhiva_lunara WHERE id='76000000-0000-0000-0000-000000000001'; ROLLBACK;" | num)
+check "T121: manifestul arhivei este vizibil in tenant" "1" "$R"
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$BETA_ID',true); SELECT count(*) FROM fisiere_arhiva_lunara WHERE id='76000000-0000-0000-0000-000000000001'; ROLLBACK;" | num)
+check "T122: manifestul arhivei este izolat de alt cabinet" "0" "$R"
+R=$($PSQL -c "BEGIN; SELECT set_config('app.utilizator_id','$CLIENT_ID',true); INSERT INTO fisiere_arhiva_lunara (arhiva_id,document_id,fisier_document_id,firma_id,perioada_contabila_id,ordine,categorie,cale_relativa,storage_key_sursa,storage_key_arhiva,nume_original,checksum_sursa,checksum_arhiva,dimensiune_bytes) VALUES ('75000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000001','$FIRMA_A','$PERIOADA_A',2,'atac','atac','atac','atac','atac',repeat('a',64),repeat('a',64),1); ROLLBACK;" 2>&1 | grep -c "permission denied")
+check "T123: app_user nu poate fabrica intrari in manifest" "1" "$R"
+R=$($WORKER -c "INSERT INTO fisiere_arhiva_lunara (arhiva_id,document_id,fisier_document_id,firma_id,perioada_contabila_id,ordine,categorie,cale_relativa,storage_key_sursa,storage_key_arhiva,nume_original,checksum_sursa,checksum_arhiva,dimensiune_bytes) VALUES ('75000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','20000000-0000-0000-0000-000000000002','$FIRMA_A','$PERIOADA_A',2,'atac','atac','atac','atac-2','atac',repeat('a',64),repeat('a',64),1);" 2>&1 | grep -c "fk_fisier_arhiva_sursa")
+check "T124: arhiva nu poate lega fisierul altui tenant" "1" "$R"
+
 echo ""
 echo "=============================="
 echo "TOTAL: $pass PASS, $fail FAIL"

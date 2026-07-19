@@ -74,6 +74,19 @@ class LocalDocumentStorage:
             temporar.unlink(missing_ok=True)
         self._write_metadata(key, content_type)
 
+    def put_archive_bytes(self, key: str, continut: bytes, content_type: str) -> None:
+        """Write a human-facing archive file without visible metadata sidecars."""
+        path = self._path(key)
+        self._ensure_private_parent(path)
+        temporar = self._temporary_path(path)
+        try:
+            temporar.write_bytes(continut)
+            temporar.chmod(0o600)
+            os.replace(temporar, path)
+        finally:
+            temporar.unlink(missing_ok=True)
+        self._metadata_path(key).unlink(missing_ok=True)
+
     def put_file(self, key: str, sursa: Path | str, content_type: str) -> None:
         path = self._path(key)
         self._ensure_private_parent(path)
@@ -116,6 +129,14 @@ class LocalDocumentStorage:
     def delete(self, key: str) -> None:
         self._path(key).unlink(missing_ok=True)
         self._metadata_path(key).unlink(missing_ok=True)
+
+    def delete_prefix(self, prefix: str) -> None:
+        path = self._path(prefix.rstrip("/"))
+        if path == self.root:
+            raise EroareStorage("Prefixul de ștergere nu poate fi rădăcina storage-ului.")
+        if path.exists() and not path.is_dir():
+            raise EroareStorage("Prefixul de ștergere nu este un director.")
+        shutil.rmtree(path, ignore_errors=True)
 
     def healthcheck(self) -> None:
         verificat = self.root
@@ -184,6 +205,9 @@ class R2DocumentStorage:
             ContentType=content_type,
         )
 
+    def put_archive_bytes(self, key: str, continut: bytes, content_type: str) -> None:
+        self.put_bytes(key, continut, content_type)
+
     def put_file(self, key: str, sursa: Path | str, content_type: str) -> None:
         self.client.upload_file(
             str(sursa),
@@ -215,6 +239,22 @@ class R2DocumentStorage:
 
     def delete(self, key: str) -> None:
         self.client.delete_object(Bucket=self.bucket, Key=key)
+
+    def delete_prefix(self, prefix: str) -> None:
+        prefix = prefix.strip("/")
+        if not prefix:
+            raise EroareStorage("Prefixul de ștergere nu poate fi rădăcina storage-ului.")
+        try:
+            paginator = self.client.get_paginator("list_objects_v2")
+            for pagina in paginator.paginate(Bucket=self.bucket, Prefix=f"{prefix}/"):
+                obiecte = [{"Key": item["Key"]} for item in pagina.get("Contents", [])]
+                if obiecte:
+                    self.client.delete_objects(
+                        Bucket=self.bucket,
+                        Delete={"Objects": obiecte, "Quiet": True},
+                    )
+        except ClientError as exc:
+            raise EroareStorage("Prefixul arhivei nu a putut fi curățat din R2.") from exc
 
     def healthcheck(self) -> None:
         try:

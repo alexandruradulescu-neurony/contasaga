@@ -198,7 +198,10 @@ def programeaza_predare(
             firma=perioada.firma,
             roluri=ROLURI_PROGRAMARE,
         )
-        if perioada.stare == PerioadaContabila.Stare.INCHISA:
+        if perioada.stare in {
+            PerioadaContabila.Stare.INCHIDERE_IN_CURS,
+            PerioadaContabila.Stare.INCHISA,
+        }:
             raise EroareLogistica("Nu se poate programa o predare nouă pe o perioadă închisă.")
 
         predat_de = predat_de.strip()
@@ -358,7 +361,10 @@ def incepe_digitizarea(*, predare_id, actor, numar_documente_estimat, context):
         raise EroareLogistica("Estimarea trebuie să fie de cel puțin un document.")
     with transaction.atomic(using="privileged"):
         predare, utilizator = _predare_pentru_digitizare(predare_id=predare_id, actor=actor)
-        if predare.perioada_contabila.stare == PerioadaContabila.Stare.INCHISA:
+        if predare.perioada_contabila.stare in {
+            PerioadaContabila.Stare.INCHIDERE_IN_CURS,
+            PerioadaContabila.Stare.INCHISA,
+        }:
             raise EroareLogistica("Redeschide dosarul lunar înainte de a începe digitizarea.")
         stare_veche = predare.digitizare_status
         predare.digitizare_status = stare_urmatoare_digitizare(stare_veche, "incepe")
@@ -494,7 +500,10 @@ def redeschide_digitizarea(*, predare_id, actor, context):
         raise PermissionDenied
     with transaction.atomic(using="privileged"):
         predare, utilizator = _predare_pentru_digitizare(predare_id=predare_id, actor=actor)
-        if predare.perioada_contabila.stare == PerioadaContabila.Stare.INCHISA:
+        if predare.perioada_contabila.stare in {
+            PerioadaContabila.Stare.INCHIDERE_IN_CURS,
+            PerioadaContabila.Stare.INCHISA,
+        }:
             raise EroareLogistica("Redeschide dosarul lunar înainte de a continua digitizarea.")
         stare_veche = predare.digitizare_status
         predare.digitizare_status = stare_urmatoare_digitizare(stare_veche, "redeschide")

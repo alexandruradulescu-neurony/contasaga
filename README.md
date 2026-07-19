@@ -52,10 +52,61 @@ până la 500 de fișiere PDF/JPG/PNG/HEIC, maximum 25 MB fiecare și 2 GB în t
 Încărcările incomplete stau cel mult 24 de ore în
 `_temp/<lot UUID>/`, iar originalele validate sunt mutate în
 `inbox/<lot UUID>/originals/` și păstrează în baza de date numele inițial,
-uploaderul, dimensiunea și checksum-ul. În această primă fază fișierele rămân
-necategorizate; clasificarea contabilului și arhiva lunară cu nume lizibile sunt
-fazele următoare descrise în
+uploaderul, dimensiunea și checksum-ul. Contabilul le clasifică din coada
+`/inbox/clasificare/`; sugestia AI este opțională, iar decizia contabilului
+rămâne obligatorie și auditată. La închiderea lunii, workerul construiește
+arhiva versionată `archive/vNNNN/`, cu directoare
+`primite|emise|fara-directie/<tip-document>/`, nume lizibile și un
+`.system/manifest.csv` verificat prin SHA-256. Implementarea completă este
+descrisă în
 [`docs/BULK_INBOX_AND_MONTH_ARCHIVE.md`](docs/BULK_INBOX_AND_MONTH_ARCHIVE.md).
+
+## Citirea locală și clasificarea asistată de AI
+
+Funcția este dezactivată implicit și coada contabilului funcționează complet
+manual. Pentru activare se configurează `DOCUMENT_AI_ENABLED=true`, providerul
+`openai` sau `deepseek`, modelul și cheia corespunzătoare. Comanda workerului
+este:
+
+```bash
+uv run python manage.py process_document_analyses --watch
+```
+
+Workerul citește mai întâi local fiecare pagină: folosește textul PDF existent,
+iar pentru paginile scanate și imagini rulează Tesseract (`ron+eng`). Generează
+previzualizări, text căutabil și sugestii conservative de separare. Contabilul
+poate confirma intervalele și crea mai multe documente dintr-un singur PDF;
+originalul rămâne intact, iar fiecare derivat păstrează intervalul și ambele
+checksum-uri. `DOCUMENT_OCR_ENABLED=true` este implicit; macOS necesită
+`brew install tesseract tesseract-lang`.
+
+OpenAI primește PDF-ul sau imaginea originală și returnează un rezultat JSON
+constrâns, inclusiv limite de document. Adapterul DeepSeek primește textul
+local paginat, inclusiv OCR-ul imaginilor și al PDF-urilor scanate. Rezultatul
+modelului nu creează automat documente: contabilul confirmă, corectează,
+separă sau ignoră fișierul, iar sistemul păstrează providerul, modelul,
+versiunea promptului, încrederea, dovezile și decizia finală.
+
+Pentru documentele ajunse în verificare, același worker poate extrage
+furnizorul/clientul, CUI-urile, seria, numărul, datele, moneda și valorile
+net/TVA/total. Valorile sunt doar sugestii: formularul contabilului este
+precompletat, neconcordanțele sunt semnalate, iar acceptarea salvează atât
+rezultatul modelului, cât și valorile finale și identitatea celui care le-a
+revizuit. Cu AI dezactivat, documentele rămân complet procesabile manual.
+
+## Închiderea și arhiva lunară
+
+Închiderea nu mai schimbă imediat luna în `inchisa`. După validarea
+checklist-ului, inboxului, digitizărilor și documentelor, perioada intră în
+`inchidere_in_curs`, devine temporar nemodificabilă, iar workerul copiază și
+verifică toate fișierele în arhiva finală. Manifestul este publicat ultimul;
+abia apoi documentele devin `arhivat`, perioada devine `inchisa` și clientul
+este notificat. Joburile întrerupte sunt reluate după expirarea lease-ului; la
+trei eșecuri luna revine auditat în `in_lucru`.
+
+Workerul `process_document_analyses --watch` procesează citirea locală,
+analiza/extragerea AI opțională și arhivele lunare. Prin urmare, el trebuie să
+ruleze și când AI este dezactivat.
 
 Pentru Cloudflare R2 setează `DOCUMENT_STORAGE_BACKEND=r2` și variabilele
 `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`.
@@ -147,7 +198,7 @@ rolul web are numai acces de citire la tabela logistică.
 ## Operații periodice fără Docker
 
 Comanda `run_scheduled_maintenance frequent` reîncearcă procesarea fișierelor,
-emailurile din outbox și exporturile. Comanda `run_scheduled_maintenance daily`
+analizele AI, emailurile din outbox și exporturile. Comanda `run_scheduled_maintenance daily`
 curăță intențiile de upload, obiectele temporare ale inboxului și exporturile
 expirate. Exemplele launchd sunt:
 

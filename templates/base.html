@@ -21,6 +21,7 @@
                     <a class="primary-nav__link" href="{% url 'dashboard' %}"{% if request.resolver_match.url_name == 'dashboard' %} aria-current="page"{% endif %}>Acasă</a>
                     {% if user.rol == "contabil" or user.rol == "contabil_coordonator" %}
                         <a class="primary-nav__link" href="{% url 'verificare_documente' %}"{% if request.resolver_match.url_name == 'verificare_documente' %} aria-current="page"{% endif %}>De verificat</a>
+                        <a class="primary-nav__link" href="{% url 'coada_clasificare_inbox' %}"{% if request.resolver_match.url_name == 'coada_clasificare_inbox' %} aria-current="page"{% endif %}>Clasificare</a>
                     {% endif %}
                     {% if user.rol == "admin_cabinet" %}
                         <a class="primary-nav__link" href="{% url 'invitatii' %}"{% if request.resolver_match.url_name == 'invitatii' %} aria-current="page"{% endif %}>Utilizatori</a>

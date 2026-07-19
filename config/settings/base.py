@@ -136,6 +136,23 @@ R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID")
 R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY")
 R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME")
 
+DOCUMENT_OCR_ENABLED = env_bool("DOCUMENT_OCR_ENABLED", True)
+DOCUMENT_OCR_COMMAND = os.getenv("DOCUMENT_OCR_COMMAND", "tesseract").strip()
+DOCUMENT_OCR_LANGUAGES = os.getenv("DOCUMENT_OCR_LANGUAGES", "ron+eng").strip()
+DOCUMENT_OCR_TIMEOUT_SECONDS = int(os.getenv("DOCUMENT_OCR_TIMEOUT_SECONDS", "60"))
+DOCUMENT_OCR_MIN_TEXT_CHARS = int(os.getenv("DOCUMENT_OCR_MIN_TEXT_CHARS", "40"))
+
+DOCUMENT_AI_ENABLED = env_bool("DOCUMENT_AI_ENABLED")
+DOCUMENT_AI_PROVIDER = os.getenv("DOCUMENT_AI_PROVIDER", "openai").strip().lower()
+DOCUMENT_AI_MODEL = os.getenv(
+    "DOCUMENT_AI_MODEL",
+    "deepseek-v4-flash" if DOCUMENT_AI_PROVIDER == "deepseek" else "gpt-5.6-luna",
+).strip()
+DOCUMENT_AI_BASE_URL = os.getenv("DOCUMENT_AI_BASE_URL", "").strip()
+DOCUMENT_AI_TIMEOUT_SECONDS = int(os.getenv("DOCUMENT_AI_TIMEOUT_SECONDS", "120"))
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
+
 EMAIL_BACKEND = os.getenv(
     "DJANGO_EMAIL_BACKEND",
     "django.core.mail.backends.console.EmailBackend",

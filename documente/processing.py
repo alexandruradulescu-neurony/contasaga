@@ -131,6 +131,7 @@ def proceseaza_fisier(fisier_id, *, reincearca=False):
                     "eroare_procesare",
                 ],
             )
+            incercare_curenta = fisier.incercari_procesare
 
     if procesare_epuizata:
         notifica_eroare_procesare_fisier(fisier=fisier)
@@ -163,6 +164,11 @@ def proceseaza_fisier(fisier_id, *, reincearca=False):
             fisier = (
                 FisierDocument.objects.using("privileged").select_for_update().get(pk=fisier_id)
             )
+            if (
+                fisier.stare_procesare != FisierDocument.StareProcesare.IN_LUCRU
+                or fisier.incercari_procesare != incercare_curenta
+            ):
+                return fisier
             if fisier.sters_la:
                 fisier.stare_procesare = FisierDocument.StareProcesare.EROARE
                 fisier.procesare_inceputa_la = None
@@ -194,6 +200,11 @@ def proceseaza_fisier(fisier_id, *, reincearca=False):
     inlocuire_depasita = False
     with transaction.atomic(using="privileged"):
         fisier = FisierDocument.objects.using("privileged").select_for_update().get(pk=fisier_id)
+        if (
+            fisier.stare_procesare != FisierDocument.StareProcesare.IN_LUCRU
+            or fisier.incercari_procesare != incercare_curenta
+        ):
+            return fisier
         if fisier.sters_la:
             # Fișierul poate fi eliminat de autor cât timp procesarea rulează
             # în afara tranzacției. Nu îl reactivăm după ștergere.

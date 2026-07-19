@@ -1,3 +1,5 @@
+import shutil
+
 from django.conf import settings
 from django.core.checks import Error, Tags, register
 
@@ -99,4 +101,69 @@ def production_configuration_checks(app_configs, **kwargs):
                 id="core.E011",
             )
         )
+    if settings.DOCUMENT_OCR_ENABLED:
+        if not settings.DOCUMENT_OCR_COMMAND or not shutil.which(settings.DOCUMENT_OCR_COMMAND):
+            errors.append(
+                Error(
+                    "Install the configured DOCUMENT_OCR_COMMAND before enabling OCR.",
+                    id="core.E017",
+                )
+            )
+        if not settings.DOCUMENT_OCR_LANGUAGES:
+            errors.append(
+                Error(
+                    "Set DOCUMENT_OCR_LANGUAGES before enabling OCR.",
+                    id="core.E018",
+                )
+            )
+        if not 10 <= settings.DOCUMENT_OCR_TIMEOUT_SECONDS <= 300:
+            errors.append(
+                Error(
+                    "DOCUMENT_OCR_TIMEOUT_SECONDS must be between 10 and 300.",
+                    id="core.E019",
+                )
+            )
+        if not 1 <= settings.DOCUMENT_OCR_MIN_TEXT_CHARS <= 1000:
+            errors.append(
+                Error(
+                    "DOCUMENT_OCR_MIN_TEXT_CHARS must be between 1 and 1000.",
+                    id="core.E020",
+                )
+            )
+    if settings.DOCUMENT_AI_ENABLED:
+        if settings.DOCUMENT_AI_PROVIDER not in {"openai", "deepseek"}:
+            errors.append(
+                Error(
+                    "DOCUMENT_AI_PROVIDER must be openai or deepseek.",
+                    id="core.E012",
+                )
+            )
+        elif settings.DOCUMENT_AI_PROVIDER == "openai" and not settings.OPENAI_API_KEY:
+            errors.append(
+                Error(
+                    "Set OPENAI_API_KEY before enabling document AI.",
+                    id="core.E013",
+                )
+            )
+        elif settings.DOCUMENT_AI_PROVIDER == "deepseek" and not settings.DEEPSEEK_API_KEY:
+            errors.append(
+                Error(
+                    "Set DEEPSEEK_API_KEY before enabling document AI.",
+                    id="core.E014",
+                )
+            )
+        if not settings.DOCUMENT_AI_MODEL:
+            errors.append(
+                Error(
+                    "Set DOCUMENT_AI_MODEL before enabling document AI.",
+                    id="core.E015",
+                )
+            )
+        if not 10 <= settings.DOCUMENT_AI_TIMEOUT_SECONDS <= 600:
+            errors.append(
+                Error(
+                    "DOCUMENT_AI_TIMEOUT_SECONDS must be between 10 and 600.",
+                    id="core.E016",
+                )
+            )
     return errors

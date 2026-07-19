@@ -285,7 +285,7 @@ CREATE TABLE perioade_contabile (
     CONSTRAINT chk_perioada_an CHECK (an BETWEEN 2000 AND 2100),
     CONSTRAINT chk_perioada_stare CHECK (stare IN (
         'deschisa', 'documente_incomplete', 'gata_pentru_verificare',
-        'in_lucru', 'inchisa'
+        'in_lucru', 'inchidere_in_curs', 'inchisa'
     ))
 );
 
@@ -401,6 +401,7 @@ CREATE TABLE documente (
     creat_la                  timestamptz NOT NULL DEFAULT now(),
     actualizat_la             timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT uq_doc_id_firma UNIQUE (id, firma_id),
+    CONSTRAINT uq_doc_firma_perioada UNIQUE (id, firma_id, perioada_contabila_id),
     CONSTRAINT fk_doc_perioada FOREIGN KEY (perioada_contabila_id, firma_id)
         REFERENCES perioade_contabile(id, firma_id) ON DELETE RESTRICT,
     CONSTRAINT fk_doc_partener FOREIGN KEY (partener_id, firma_id)
@@ -656,6 +657,7 @@ CREATE TABLE fisiere_inbox (
     expira_la                timestamptz NOT NULL,
     incarcat_la              timestamptz,
     creat_la                 timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT uq_inbox_firma_perioada UNIQUE (id, firma_id, perioada_contabila_id),
     CONSTRAINT fk_inbox_lot FOREIGN KEY (lot_id, firma_id, perioada_contabila_id)
         REFERENCES loturi_incarcare(id, firma_id, perioada_contabila_id)
         ON DELETE RESTRICT,
@@ -667,13 +669,13 @@ CREATE TABLE fisiere_inbox (
         'application/pdf', 'image/jpeg', 'image/png', 'image/heic', 'image/heif'
     )),
     CONSTRAINT chk_inbox_status CHECK (status IN (
-        'in_asteptare', 'disponibil', 'eroare', 'expirat', 'clasificat'
+        'in_asteptare', 'disponibil', 'eroare', 'expirat', 'clasificat', 'ignorat'
     )),
     CONSTRAINT chk_inbox_finalizare CHECK (
         (status = 'in_asteptare'
          AND storage_key IS NULL AND dimensiune_bytes IS NULL
          AND checksum IS NULL AND incarcat_la IS NULL AND eroare IS NULL)
-        OR (status IN ('disponibil', 'clasificat')
+        OR (status IN ('disponibil', 'clasificat', 'ignorat')
             AND storage_key IS NOT NULL AND dimensiune_bytes = dimensiune_declarata
             AND checksum IS NOT NULL AND incarcat_la IS NOT NULL AND eroare IS NULL)
         OR (status = 'eroare' AND storage_key IS NULL AND eroare IS NOT NULL)
@@ -752,6 +754,409 @@ GRANT EXECUTE ON FUNCTION fn_pregateste_fisier_inbox() TO app_user, app_admin;
 CREATE TRIGGER trg_pregateste_fisier_inbox
     BEFORE INSERT ON fisiere_inbox
     FOR EACH ROW EXECUTE FUNCTION fn_pregateste_fisier_inbox();
+
+-- Analiza asistata de AI este deliberat separata de fisierul brut. Rezultatul
+-- modelului ramane o sugestie; numai revizuirea explicita a contabilului poate
+-- crea documentul final sau poate marca fisierul drept ignorat.
+CREATE TABLE analize_fisiere_inbox (
+    id                           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    fisier_inbox_id              uuid NOT NULL UNIQUE,
+    firma_id                     uuid NOT NULL REFERENCES firme(id) ON DELETE RESTRICT,
+    perioada_contabila_id        uuid NOT NULL,
+    status                       varchar(20) NOT NULL DEFAULT 'in_asteptare',
+    provider                     varchar(50),
+    model                        varchar(100),
+    versiune_prompt              varchar(50) NOT NULL DEFAULT 'document-classifier-v1',
+    incercari                    smallint NOT NULL DEFAULT 0,
+    procesare_inceputa_la        timestamptz,
+    reincearca_dupa              timestamptz NOT NULL DEFAULT now(),
+    finalizata_la                timestamptz,
+    eroare                       text,
+    tip_document_sugerat_id      uuid REFERENCES tipuri_document(id) ON DELETE RESTRICT,
+    cont_financiar_sugerat_id    uuid,
+    directie_sugerata            varchar(10),
+    incredere                    numeric(5,4),
+    rezumat                      text,
+    text_extras                  text,
+    dovezi                       jsonb NOT NULL DEFAULT '[]'::jsonb,
+    raspuns_provider_id          varchar(255),
+    tokeni_intrare               integer,
+    tokeni_iesire                integer,
+    status_citire                varchar(20) NOT NULL DEFAULT 'in_asteptare',
+    incercari_citire             smallint NOT NULL DEFAULT 0,
+    citire_inceputa_la           timestamptz,
+    reincearca_citire_dupa       timestamptz NOT NULL DEFAULT now(),
+    citire_finalizata_la         timestamptz,
+    eroare_citire                text,
+    metoda_citire                varchar(20),
+    numar_pagini                 smallint,
+    limite_sugerate              jsonb NOT NULL DEFAULT '[]'::jsonb,
+    campuri_extrase              jsonb NOT NULL DEFAULT '{}'::jsonb,
+    avertismente_extragere       jsonb NOT NULL DEFAULT '[]'::jsonb,
+    status_revizuire             varchar(20) NOT NULL DEFAULT 'in_asteptare',
+    revizuita_de                 uuid REFERENCES utilizatori(id) ON DELETE RESTRICT,
+    revizuita_la                 timestamptz,
+    tip_document_final_id        uuid REFERENCES tipuri_document(id) ON DELETE RESTRICT,
+    cont_financiar_final_id      uuid,
+    directie_finala              varchar(10),
+    document_id                  uuid UNIQUE,
+    observatii_revizuire         text,
+    creat_la                     timestamptz NOT NULL DEFAULT now(),
+    actualizat_la                timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT uq_analiza_firma_perioada UNIQUE (id, firma_id, perioada_contabila_id),
+    CONSTRAINT fk_analiza_inbox FOREIGN KEY (
+        fisier_inbox_id, firma_id, perioada_contabila_id
+    ) REFERENCES fisiere_inbox(id, firma_id, perioada_contabila_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_analiza_perioada FOREIGN KEY (perioada_contabila_id, firma_id)
+        REFERENCES perioade_contabile(id, firma_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_analiza_cont_sugerat FOREIGN KEY (cont_financiar_sugerat_id, firma_id)
+        REFERENCES conturi_financiare(id, firma_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_analiza_cont_final FOREIGN KEY (cont_financiar_final_id, firma_id)
+        REFERENCES conturi_financiare(id, firma_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_analiza_document FOREIGN KEY (document_id, firma_id, perioada_contabila_id)
+        REFERENCES documente(id, firma_id, perioada_contabila_id) ON DELETE RESTRICT,
+    CONSTRAINT chk_analiza_status CHECK (status IN (
+        'in_asteptare', 'in_lucru', 'finalizata', 'eroare'
+    )),
+    CONSTRAINT chk_analiza_revizuire CHECK (status_revizuire IN (
+        'in_asteptare', 'confirmata', 'corectata', 'segmentata', 'ignorata'
+    )),
+    CONSTRAINT chk_analiza_status_citire CHECK (status_citire IN (
+        'in_asteptare', 'in_lucru', 'finalizata', 'eroare'
+    )),
+    CONSTRAINT chk_analiza_directii CHECK (
+        (directie_sugerata IS NULL OR directie_sugerata IN ('primit', 'emis'))
+        AND (directie_finala IS NULL OR directie_finala IN ('primit', 'emis'))
+    ),
+    CONSTRAINT chk_analiza_incredere CHECK (incredere IS NULL OR incredere BETWEEN 0 AND 1),
+    CONSTRAINT chk_analiza_incercari CHECK (incercari BETWEEN 0 AND 3),
+    CONSTRAINT chk_analiza_incercari_citire CHECK (incercari_citire BETWEEN 0 AND 3),
+    CONSTRAINT chk_analiza_lease CHECK (
+        (status = 'in_lucru' AND procesare_inceputa_la IS NOT NULL)
+        OR (status <> 'in_lucru' AND procesare_inceputa_la IS NULL)
+    ),
+    CONSTRAINT chk_analiza_lease_citire CHECK (
+        (status_citire = 'in_lucru' AND citire_inceputa_la IS NOT NULL)
+        OR (status_citire <> 'in_lucru' AND citire_inceputa_la IS NULL)
+    ),
+    CONSTRAINT chk_analiza_rezultat_citire CHECK (
+        (status_citire = 'finalizata'
+         AND citire_finalizata_la IS NOT NULL
+         AND metoda_citire IS NOT NULL
+         AND numar_pagini BETWEEN 1 AND 300
+         AND eroare_citire IS NULL)
+        OR status_citire <> 'finalizata'
+    ),
+    CONSTRAINT chk_analiza_revizuire_coerenta CHECK (
+        (status_revizuire = 'in_asteptare'
+         AND revizuita_de IS NULL AND revizuita_la IS NULL AND document_id IS NULL
+         AND tip_document_final_id IS NULL AND cont_financiar_final_id IS NULL
+         AND directie_finala IS NULL)
+        OR (status_revizuire IN ('confirmata', 'corectata')
+            AND revizuita_de IS NOT NULL AND revizuita_la IS NOT NULL
+            AND document_id IS NOT NULL AND tip_document_final_id IS NOT NULL)
+        OR (status_revizuire IN ('segmentata', 'ignorata')
+            AND revizuita_de IS NOT NULL AND revizuita_la IS NOT NULL
+            AND document_id IS NULL AND tip_document_final_id IS NULL
+            AND cont_financiar_final_id IS NULL AND directie_finala IS NULL)
+    )
+);
+
+CREATE INDEX idx_analize_de_procesat
+    ON analize_fisiere_inbox(reincearca_dupa, creat_la)
+    WHERE status IN ('in_asteptare', 'eroare') AND incercari < 3;
+CREATE INDEX idx_analize_lease
+    ON analize_fisiere_inbox(procesare_inceputa_la)
+    WHERE status = 'in_lucru';
+CREATE INDEX idx_analize_revizuire
+    ON analize_fisiere_inbox(firma_id, status_revizuire, creat_la)
+    WHERE status_revizuire = 'in_asteptare';
+CREATE INDEX idx_analize_citire
+    ON analize_fisiere_inbox(reincearca_citire_dupa, creat_la)
+    WHERE status_citire IN ('in_asteptare', 'eroare') AND incercari_citire < 3;
+CREATE INDEX idx_analize_lease_citire
+    ON analize_fisiere_inbox(citire_inceputa_la)
+    WHERE status_citire = 'in_lucru';
+
+CREATE TRIGGER trg_analize_actualizat
+    BEFORE UPDATE ON analize_fisiere_inbox
+    FOR EACH ROW EXECUTE FUNCTION fn_set_actualizat_la();
+
+CREATE OR REPLACE FUNCTION fn_programeaza_analiza_inbox() RETURNS trigger AS $$
+BEGIN
+    IF NEW.status = 'disponibil'
+       AND (TG_OP = 'INSERT' OR OLD.status IS DISTINCT FROM NEW.status) THEN
+        INSERT INTO public.analize_fisiere_inbox (
+            fisier_inbox_id, firma_id, perioada_contabila_id
+        ) VALUES (NEW.id, NEW.firma_id, NEW.perioada_contabila_id)
+        ON CONFLICT (fisier_inbox_id) DO NOTHING;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+REVOKE ALL ON FUNCTION fn_programeaza_analiza_inbox() FROM PUBLIC;
+
+CREATE TRIGGER trg_programeaza_analiza_inbox
+    AFTER INSERT OR UPDATE OF status ON fisiere_inbox
+    FOR EACH ROW EXECUTE FUNCTION fn_programeaza_analiza_inbox();
+
+-- Citirea locală este separată pe pagini, cu preview și text căutabil. Cheia
+-- preview-ului este derivată din prefixul lunar al originalului și nu expune
+-- fișierul fără autorizarea normală a aplicației.
+CREATE TABLE pagini_fisiere_inbox (
+    id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    analiza_id            uuid NOT NULL,
+    fisier_inbox_id       uuid NOT NULL,
+    firma_id              uuid NOT NULL REFERENCES firme(id) ON DELETE RESTRICT,
+    perioada_contabila_id uuid NOT NULL,
+    numar_pagina          smallint NOT NULL,
+    metoda                varchar(20) NOT NULL,
+    text_extras           text NOT NULL DEFAULT '',
+    incredere_ocr         numeric(5,4),
+    preview_storage_key   varchar(500) NOT NULL UNIQUE,
+    preview_checksum      varchar(64) NOT NULL,
+    latime_preview        integer NOT NULL,
+    inaltime_preview      integer NOT NULL,
+    creat_la              timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT fk_pagina_analiza FOREIGN KEY (
+        analiza_id, firma_id, perioada_contabila_id
+    ) REFERENCES analize_fisiere_inbox(id, firma_id, perioada_contabila_id)
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_pagina_inbox FOREIGN KEY (
+        fisier_inbox_id, firma_id, perioada_contabila_id
+    ) REFERENCES fisiere_inbox(id, firma_id, perioada_contabila_id)
+        ON DELETE RESTRICT,
+    CONSTRAINT uq_pagina_inbox UNIQUE (fisier_inbox_id, numar_pagina),
+    CONSTRAINT chk_pagina_numar CHECK (numar_pagina BETWEEN 1 AND 300),
+    CONSTRAINT chk_pagina_metoda CHECK (metoda IN ('text_pdf', 'tesseract', 'fara_text')),
+    CONSTRAINT chk_pagina_incredere CHECK (
+        incredere_ocr IS NULL OR incredere_ocr BETWEEN 0 AND 1
+    ),
+    CONSTRAINT chk_pagina_preview CHECK (
+        latime_preview BETWEEN 1 AND 5000 AND inaltime_preview BETWEEN 1 AND 5000
+    )
+);
+
+CREATE INDEX idx_pagini_analiza
+    ON pagini_fisiere_inbox(analiza_id, numar_pagina);
+
+-- Un derivat păstrează exact intervalul și ambele checksum-uri. Originalul
+-- inbox nu este modificat sau șters prin confirmarea separării.
+CREATE TABLE derivari_fisiere_inbox (
+    id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    analiza_id            uuid NOT NULL,
+    fisier_inbox_id       uuid NOT NULL,
+    fisier_document_id    uuid NOT NULL UNIQUE,
+    document_id           uuid NOT NULL,
+    firma_id              uuid NOT NULL REFERENCES firme(id) ON DELETE RESTRICT,
+    perioada_contabila_id uuid NOT NULL,
+    pagina_start          smallint NOT NULL,
+    pagina_sfarsit        smallint NOT NULL,
+    metoda                varchar(30) NOT NULL,
+    checksum_sursa        varchar(64) NOT NULL,
+    checksum_derivat      varchar(64) NOT NULL,
+    creat_de              uuid NOT NULL REFERENCES utilizatori(id) ON DELETE RESTRICT,
+    creat_la              timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT fk_derivare_analiza FOREIGN KEY (
+        analiza_id, firma_id, perioada_contabila_id
+    ) REFERENCES analize_fisiere_inbox(id, firma_id, perioada_contabila_id)
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_derivare_inbox FOREIGN KEY (
+        fisier_inbox_id, firma_id, perioada_contabila_id
+    ) REFERENCES fisiere_inbox(id, firma_id, perioada_contabila_id)
+        ON DELETE RESTRICT,
+    CONSTRAINT fk_derivare_fisier FOREIGN KEY (fisier_document_id, firma_id)
+        REFERENCES fisiere_document(id, firma_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_derivare_document FOREIGN KEY (
+        document_id, firma_id, perioada_contabila_id
+    ) REFERENCES documente(id, firma_id, perioada_contabila_id) ON DELETE RESTRICT,
+    CONSTRAINT chk_derivare_interval CHECK (
+        pagina_start BETWEEN 1 AND 300
+        AND pagina_sfarsit BETWEEN pagina_start AND 300
+    ),
+    CONSTRAINT chk_derivare_metoda CHECK (metoda IN (
+        'copie_integrala', 'extragere_pagini'
+    ))
+);
+
+CREATE INDEX idx_derivari_sursa
+    ON derivari_fisiere_inbox(fisier_inbox_id, pagina_start);
+
+-- Extragerea structurată este versionată după amprenta setului de fișiere.
+-- Sugestiile rămân read-only pentru web și devin date de business numai prin
+-- acceptarea explicită a contabilului.
+CREATE TABLE extractii_structurate_documente (
+    id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    document_id           uuid NOT NULL,
+    fisier_document_id    uuid NOT NULL,
+    firma_id              uuid NOT NULL REFERENCES firme(id) ON DELETE RESTRICT,
+    perioada_contabila_id uuid NOT NULL,
+    status                varchar(20) NOT NULL DEFAULT 'in_asteptare',
+    provider              varchar(50),
+    model                 varchar(100),
+    versiune_prompt       varchar(50) NOT NULL DEFAULT 'structured-extraction-v1',
+    incercari             smallint NOT NULL DEFAULT 0,
+    procesare_inceputa_la timestamptz,
+    reincearca_dupa       timestamptz NOT NULL DEFAULT now(),
+    finalizata_la         timestamptz,
+    eroare                text,
+    checksum_sursa        varchar(64) NOT NULL,
+    fisiere_sursa         jsonb NOT NULL DEFAULT '[]'::jsonb,
+    campuri_sugerate      jsonb NOT NULL DEFAULT '{}'::jsonb,
+    avertismente          jsonb NOT NULL DEFAULT '[]'::jsonb,
+    incredere             numeric(5,4),
+    raspuns_provider_id   varchar(255),
+    tokeni_intrare        integer,
+    tokeni_iesire         integer,
+    status_revizuire      varchar(20) NOT NULL DEFAULT 'in_asteptare',
+    revizuita_de          uuid REFERENCES utilizatori(id) ON DELETE RESTRICT,
+    revizuita_la          timestamptz,
+    campuri_finale        jsonb NOT NULL DEFAULT '{}'::jsonb,
+    creat_la              timestamptz NOT NULL DEFAULT now(),
+    actualizat_la         timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT fk_extractie_document FOREIGN KEY (
+        document_id, firma_id, perioada_contabila_id
+    ) REFERENCES documente(id, firma_id, perioada_contabila_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_extractie_fisier FOREIGN KEY (fisier_document_id, firma_id)
+        REFERENCES fisiere_document(id, firma_id) ON DELETE RESTRICT,
+    CONSTRAINT uq_extractie_sursa UNIQUE (document_id, checksum_sursa),
+    CONSTRAINT chk_extractie_status CHECK (status IN (
+        'in_asteptare', 'in_lucru', 'finalizata', 'eroare'
+    )),
+    CONSTRAINT chk_extractie_revizuire CHECK (status_revizuire IN (
+        'in_asteptare', 'confirmata', 'corectata', 'manuala'
+    )),
+    CONSTRAINT chk_extractie_incercari CHECK (incercari BETWEEN 0 AND 3),
+    CONSTRAINT chk_extractie_lease CHECK (
+        (status = 'in_lucru' AND procesare_inceputa_la IS NOT NULL)
+        OR (status <> 'in_lucru' AND procesare_inceputa_la IS NULL)
+    ),
+    CONSTRAINT chk_extractie_rezultat CHECK (
+        (status = 'finalizata' AND finalizata_la IS NOT NULL AND eroare IS NULL
+         AND provider IS NOT NULL AND model IS NOT NULL)
+        OR status <> 'finalizata'
+    ),
+    CONSTRAINT chk_extractie_revizuire_coerenta CHECK (
+        (status_revizuire = 'in_asteptare' AND revizuita_de IS NULL
+         AND revizuita_la IS NULL AND campuri_finale = '{}'::jsonb)
+        OR (status_revizuire <> 'in_asteptare' AND revizuita_de IS NOT NULL
+            AND revizuita_la IS NOT NULL)
+    ),
+    CONSTRAINT chk_extractie_json CHECK (
+        jsonb_typeof(fisiere_sursa) = 'array'
+        AND jsonb_typeof(campuri_sugerate) = 'object'
+        AND jsonb_typeof(avertismente) = 'array'
+        AND jsonb_typeof(campuri_finale) = 'object'
+    ),
+    CONSTRAINT chk_extractie_incredere CHECK (
+        incredere IS NULL OR incredere BETWEEN 0 AND 1
+    )
+);
+
+CREATE INDEX idx_extractii_coada
+    ON extractii_structurate_documente(reincearca_dupa, creat_la)
+    WHERE status IN ('in_asteptare', 'eroare') AND incercari < 3
+      AND status_revizuire = 'in_asteptare';
+CREATE INDEX idx_extractii_document
+    ON extractii_structurate_documente(document_id, creat_la DESC);
+
+CREATE TRIGGER trg_extractii_structurate_actualizat
+    BEFORE UPDATE ON extractii_structurate_documente
+    FOR EACH ROW EXECUTE FUNCTION fn_set_actualizat_la();
+
+-- Închiderea lunii rulează în fundal. Manifestul final este scris ultimul și
+-- funcționează ca marker de publicare pentru versiunea imuabilă a arhivei.
+CREATE TABLE arhive_lunare (
+    id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    firma_id              uuid NOT NULL REFERENCES firme(id) ON DELETE RESTRICT,
+    perioada_contabila_id uuid NOT NULL,
+    versiune              integer NOT NULL,
+    status                varchar(20) NOT NULL DEFAULT 'in_asteptare',
+    prefix_staging        varchar(500) NOT NULL,
+    prefix_final          varchar(500) NOT NULL,
+    manifest_storage_key  varchar(500),
+    manifest_checksum     varchar(64),
+    numar_fisiere         integer NOT NULL DEFAULT 0,
+    dimensiune_totala     bigint NOT NULL DEFAULT 0,
+    incercari             smallint NOT NULL DEFAULT 0,
+    procesare_inceputa_la timestamptz,
+    reincearca_dupa       timestamptz NOT NULL DEFAULT now(),
+    finalizata_la         timestamptz,
+    eroare                text,
+    solicitata_de         uuid NOT NULL REFERENCES utilizatori(id) ON DELETE RESTRICT,
+    audit_ip              inet,
+    audit_user_agent      varchar(255),
+    creat_la              timestamptz NOT NULL DEFAULT now(),
+    actualizat_la         timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT fk_arhiva_perioada FOREIGN KEY (perioada_contabila_id, firma_id)
+        REFERENCES perioade_contabile(id, firma_id) ON DELETE RESTRICT,
+    CONSTRAINT uq_arhiva_tenant UNIQUE (id, firma_id, perioada_contabila_id),
+    CONSTRAINT uq_arhiva_versiune UNIQUE (perioada_contabila_id, versiune),
+    CONSTRAINT chk_arhiva_versiune CHECK (versiune >= 1),
+    CONSTRAINT chk_arhiva_status CHECK (status IN (
+        'in_asteptare', 'in_lucru', 'finalizata', 'eroare', 'inlocuita', 'anulata'
+    )),
+    CONSTRAINT chk_arhiva_incercari CHECK (incercari BETWEEN 0 AND 3),
+    CONSTRAINT chk_arhiva_lease CHECK (
+        (status = 'in_lucru' AND procesare_inceputa_la IS NOT NULL)
+        OR (status <> 'in_lucru' AND procesare_inceputa_la IS NULL)
+    ),
+    CONSTRAINT chk_arhiva_rezultat CHECK (
+        (status IN ('finalizata', 'inlocuita') AND finalizata_la IS NOT NULL
+         AND manifest_storage_key IS NOT NULL AND manifest_checksum IS NOT NULL
+         AND eroare IS NULL)
+        OR status NOT IN ('finalizata', 'inlocuita')
+    ),
+    CONSTRAINT chk_arhiva_totaluri CHECK (numar_fisiere >= 0 AND dimensiune_totala >= 0)
+);
+
+CREATE UNIQUE INDEX uq_arhiva_activa ON arhive_lunare(perioada_contabila_id)
+    WHERE status IN ('in_asteptare', 'in_lucru');
+CREATE UNIQUE INDEX uq_arhiva_finala_curenta ON arhive_lunare(perioada_contabila_id)
+    WHERE status = 'finalizata';
+CREATE INDEX idx_arhive_coada ON arhive_lunare(reincearca_dupa, creat_la)
+    WHERE status IN ('in_asteptare', 'eroare') AND incercari < 3;
+
+CREATE TABLE fisiere_arhiva_lunara (
+    id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    arhiva_id             uuid NOT NULL,
+    document_id           uuid NOT NULL,
+    fisier_document_id    uuid NOT NULL,
+    firma_id              uuid NOT NULL REFERENCES firme(id) ON DELETE RESTRICT,
+    perioada_contabila_id uuid NOT NULL,
+    ordine                integer NOT NULL,
+    categorie             varchar(150) NOT NULL,
+    cale_relativa         varchar(500) NOT NULL,
+    storage_key_sursa     varchar(500) NOT NULL,
+    storage_key_arhiva    varchar(500) NOT NULL UNIQUE,
+    nume_original         varchar(255) NOT NULL,
+    mime_type             varchar(100),
+    checksum_sursa        varchar(64) NOT NULL,
+    checksum_arhiva       varchar(64) NOT NULL,
+    dimensiune_bytes      bigint NOT NULL,
+    creat_la              timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT fk_fisier_arhiva_tenant FOREIGN KEY (
+        arhiva_id, firma_id, perioada_contabila_id
+    ) REFERENCES arhive_lunare(id, firma_id, perioada_contabila_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_fisier_arhiva_document FOREIGN KEY (
+        document_id, firma_id, perioada_contabila_id
+    ) REFERENCES documente(id, firma_id, perioada_contabila_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_fisier_arhiva_sursa FOREIGN KEY (fisier_document_id, firma_id)
+        REFERENCES fisiere_document(id, firma_id) ON DELETE RESTRICT,
+    CONSTRAINT uq_fisier_arhiva_ordine UNIQUE (arhiva_id, ordine),
+    CONSTRAINT uq_fisier_arhiva_sursa UNIQUE (arhiva_id, fisier_document_id),
+    CONSTRAINT chk_fisier_arhiva_ordine CHECK (ordine >= 1),
+    CONSTRAINT chk_fisier_arhiva_dimensiune CHECK (dimensiune_bytes >= 0),
+    CONSTRAINT chk_fisier_arhiva_checksum CHECK (checksum_sursa = checksum_arhiva)
+);
+
+CREATE INDEX idx_fisiere_arhiva_document
+    ON fisiere_arhiva_lunara(document_id, ordine);
+
+CREATE TRIGGER trg_arhive_lunare_actualizat
+    BEFORE UPDATE ON arhive_lunare
+    FOR EACH ROW EXECUTE FUNCTION fn_set_actualizat_la();
 
 CREATE TABLE cerinte_documente_perioada (
     id                         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1155,6 +1560,12 @@ REVOKE INSERT, UPDATE ON fisiere_document FROM app_user;
 -- finalizare sau schimbare de stare trece prin serviciul privilegiat.
 REVOKE UPDATE, DELETE ON loturi_incarcare FROM app_user;
 REVOKE UPDATE, DELETE ON fisiere_inbox FROM app_user;
+REVOKE INSERT, UPDATE, DELETE ON analize_fisiere_inbox FROM app_user;
+REVOKE INSERT, UPDATE, DELETE ON pagini_fisiere_inbox FROM app_user;
+REVOKE INSERT, UPDATE, DELETE ON derivari_fisiere_inbox FROM app_user;
+REVOKE INSERT, UPDATE, DELETE ON extractii_structurate_documente FROM app_user;
+REVOKE INSERT, UPDATE, DELETE ON arhive_lunare FROM app_user;
+REVOKE INSERT, UPDATE, DELETE ON fisiere_arhiva_lunara FROM app_user;
 
 -- D3 (R5): coloana parola_hash NU e lizibilă pe conexiunea web — grant pe
 -- listă explicită de coloane. Autentificarea (care are nevoie de hash)
@@ -1345,6 +1756,30 @@ CREATE POLICY pol_inbox_insert ON fisiere_inbox FOR INSERT
         firma_id IN (SELECT fn_firmele_utilizatorului())
         AND incarcat_de = fn_utilizator_curent()
     );
+
+ALTER TABLE analize_fisiere_inbox ENABLE ROW LEVEL SECURITY;
+CREATE POLICY pol_analize_select ON analize_fisiere_inbox FOR SELECT
+    USING (firma_id IN (SELECT fn_firmele_utilizatorului()));
+
+ALTER TABLE pagini_fisiere_inbox ENABLE ROW LEVEL SECURITY;
+CREATE POLICY pol_pagini_inbox_select ON pagini_fisiere_inbox FOR SELECT
+    USING (firma_id IN (SELECT fn_firmele_utilizatorului()));
+
+ALTER TABLE derivari_fisiere_inbox ENABLE ROW LEVEL SECURITY;
+CREATE POLICY pol_derivari_inbox_select ON derivari_fisiere_inbox FOR SELECT
+    USING (firma_id IN (SELECT fn_firmele_utilizatorului()));
+
+ALTER TABLE extractii_structurate_documente ENABLE ROW LEVEL SECURITY;
+CREATE POLICY pol_extractii_structurate_select ON extractii_structurate_documente FOR SELECT
+    USING (firma_id IN (SELECT fn_firmele_utilizatorului()));
+
+ALTER TABLE arhive_lunare ENABLE ROW LEVEL SECURITY;
+CREATE POLICY pol_arhive_lunare_select ON arhive_lunare FOR SELECT
+    USING (firma_id IN (SELECT fn_firmele_utilizatorului()));
+
+ALTER TABLE fisiere_arhiva_lunara ENABLE ROW LEVEL SECURITY;
+CREATE POLICY pol_fisiere_arhiva_select ON fisiere_arhiva_lunara FOR SELECT
+    USING (firma_id IN (SELECT fn_firmele_utilizatorului()));
 
 ALTER TABLE cerinte_documente_perioada ENABLE ROW LEVEL SECURITY;
 CREATE POLICY pol_cerinte_all ON cerinte_documente_perioada

@@ -31,6 +31,8 @@ from documente.storage_keys import (
     cheie_original_inbox,
     cheie_temporara_inbox,
     cheie_thumbnail,
+    prefix_arhiva_finala,
+    prefix_arhiva_staging,
     prefix_lunar,
 )
 from documente.upload import _utilizator_cu_acces_privilegiat, poate_atasa_fisiere
@@ -103,6 +105,36 @@ class StorageKeyLayoutTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             prefix_lunar(firma_id=uuid4(), an=2026, luna=13)
 
+    def test_archive_prefixes_are_versioned_inside_the_month(self):
+        firma_id = uuid4()
+        self.assertEqual(
+            prefix_arhiva_staging(firma_id=firma_id, an=2026, luna=7, versiune=2),
+            f"clients/{firma_id}/2026-07/.system/staging/archive-v0002",
+        )
+        self.assertEqual(
+            prefix_arhiva_finala(firma_id=firma_id, an=2026, luna=7, versiune=2),
+            f"clients/{firma_id}/2026-07/archive/v0002",
+        )
+
+    def test_human_archive_files_do_not_create_visible_metadata_sidecars(self):
+        with TemporaryDirectory() as directory:
+            storage = LocalDocumentStorage(root=directory)
+            storage.put_archive_bytes(
+                "clients/client/2026-07/archive/v0001/primite/factura.pdf",
+                b"pdf",
+                "application/pdf",
+            )
+
+            self.assertEqual(
+                storage.read_bytes("clients/client/2026-07/archive/v0001/primite/factura.pdf"),
+                b"pdf",
+            )
+            self.assertFalse(
+                storage._metadata_path(  # noqa: SLF001
+                    "clients/client/2026-07/archive/v0001/primite/factura.pdf"
+                ).exists()
+            )
+
     @override_settings(DOCUMENT_STORAGE_BACKEND="local")
     def test_legacy_object_is_copied_only_when_content_matches(self):
         with TemporaryDirectory() as directory:
@@ -148,6 +180,34 @@ class LocalStorageTests(SimpleTestCase):
             )
             with self.assertRaises(EroareStorage):
                 storage.put_bytes("../evadare", b"x", "application/pdf")
+
+    def test_delete_prefix_removes_only_the_requested_subtree(self):
+        with TemporaryDirectory() as directory:
+            storage = LocalDocumentStorage(root=directory)
+            storage.put_archive_bytes(
+                "clients/firma/2026-07/archive/v0001/a.pdf", b"a", "application/pdf"
+            )
+            storage.put_archive_bytes(
+                "clients/firma/2026-07/archive/v0001/b.pdf", b"b", "application/pdf"
+            )
+            storage.put_archive_bytes(
+                "clients/firma/2026-07/archive/v0002/a.pdf", b"c", "application/pdf"
+            )
+
+            storage.delete_prefix("clients/firma/2026-07/archive/v0001")
+
+            self.assertFalse(storage._path("clients/firma/2026-07/archive/v0001").exists())
+            self.assertEqual(
+                storage.read_bytes("clients/firma/2026-07/archive/v0002/a.pdf"),
+                b"c",
+            )
+
+    def test_delete_prefix_rejects_storage_root(self):
+        with TemporaryDirectory() as directory:
+            storage = LocalDocumentStorage(root=directory)
+
+            with self.assertRaises(EroareStorage):
+                storage.delete_prefix("")
 
     def test_corrupt_local_metadata_is_reported_as_storage_error(self):
         with TemporaryDirectory() as directory:
@@ -246,6 +306,46 @@ class R2StorageTests(SimpleTestCase):
             },
             ExpiresIn=300,
         )
+
+    @override_settings(
+        R2_ACCOUNT_ID="account-id",
+        R2_ACCESS_KEY_ID="access-key",
+        R2_SECRET_ACCESS_KEY="secret-key",
+        R2_BUCKET_NAME="documents",
+    )
+    @patch("documente.storage.boto3.client")
+    def test_delete_prefix_is_scoped_and_rejects_bucket_root(self, client_factory):
+        client = client_factory.return_value
+        paginator = client.get_paginator.return_value
+        paginator.paginate.return_value = [
+            {
+                "Contents": [
+                    {"Key": "clients/firma/2026-07/archive/v0001/a.pdf"},
+                    {"Key": "clients/firma/2026-07/archive/v0001/manifest.csv"},
+                ]
+            }
+        ]
+        storage = R2DocumentStorage()
+
+        storage.delete_prefix("clients/firma/2026-07/archive/v0001")
+
+        client.get_paginator.assert_called_once_with("list_objects_v2")
+        paginator.paginate.assert_called_once_with(
+            Bucket="documents",
+            Prefix="clients/firma/2026-07/archive/v0001/",
+        )
+        client.delete_objects.assert_called_once_with(
+            Bucket="documents",
+            Delete={
+                "Objects": [
+                    {"Key": "clients/firma/2026-07/archive/v0001/a.pdf"},
+                    {"Key": "clients/firma/2026-07/archive/v0001/manifest.csv"},
+                ],
+                "Quiet": True,
+            },
+        )
+        with self.assertRaises(EroareStorage):
+            storage.delete_prefix("/")
 
 
 class UploadAuthorizationTests(SimpleTestCase):

@@ -8,7 +8,7 @@
     "preDeployCommand": [
       "python manage.py migrate --settings=config.settings.migration"
     ],
-    "startCommand": "gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 2 --threads 2 --timeout 120 --access-logfile - --error-logfile - config.wsgi:application",
+    "startCommand": "sh -c 'python manage.py process_document_analyses --watch --limit 10 --poll-seconds 10 & exec gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 2 --threads 2 --timeout 120 --access-logfile - --error-logfile - config.wsgi:application'",
     "healthcheckPath": "/health/ready/",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",

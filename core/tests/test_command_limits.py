@@ -7,6 +7,9 @@ from documente.management.commands.cleanup_inbox_uploads import (
 from documente.management.commands.cleanup_upload_intents import (
     Command as CleanupUploadIntentsCommand,
 )
+from documente.management.commands.process_document_analyses import (
+    Command as ProcessDocumentAnalysesCommand,
+)
 from documente.management.commands.process_document_files import (
     Command as ProcessDocumentFilesCommand,
 )
@@ -24,6 +27,7 @@ class CommandLimitTests(SimpleTestCase):
             CleanupUploadIntentsCommand,
             CleanupInboxUploadsCommand,
             ProcessDocumentFilesCommand,
+            ProcessDocumentAnalysesCommand,
             CleanupExpiredExportsCommand,
             RetryNotificationEmailsCommand,
         )

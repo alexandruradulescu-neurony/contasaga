@@ -25,6 +25,13 @@ izolat de rețea și accesibil numai superuserului, folosește
 - dacă proxy-ul este folosit, `DJANGO_CLIENT_IP_HEADER=HTTP_X_FORWARDED_FOR`
   numai după ce proxy-ul este configurat să suprascrie headerul primit de la
   client; valoarea este folosită pentru audit și limitarea autentificării.
+- pentru clasificarea AI: `DOCUMENT_AI_ENABLED`, `DOCUMENT_AI_PROVIDER`,
+  `DOCUMENT_AI_MODEL` și cheia providerului. Funcția rămâne `false` până când
+  cheia, DPA-ul, regiunea de procesare și testele de acceptanță sunt aprobate;
+  cheia nu se introduce în repository și nu este trimisă browserului.
+- pentru citirea locală: `DOCUMENT_OCR_ENABLED=true`, binarul Tesseract în
+  imagine, limbile `ron+eng`, timeout-ul și pragul minim de text. Acest flux nu
+  necesită și nu folosește o cheie AI.
 
 ## 2. Ordinea release-ului
 
@@ -39,7 +46,10 @@ izolat de rețea și accesibil numai superuserului, folosește
    `uv run gunicorn config.wsgi:application --bind 127.0.0.1:8000`.
 6. Pornește separat Admin-ul cu `DJANGO_SETTINGS_MODULE=config.settings.admin_prod`
    și un bind/hostname inaccesibil public.
-7. Pornește joburile periodice și workerul de export.
+7. Pornește joburile periodice, workerul de export și
+   `process_document_analyses --watch`. Acest ultim worker este obligatoriu
+   pentru citire, recuperarea lease-urilor și arhivele lunare chiar dacă AI
+   rămâne dezactivat; numai apelurile către provider depind de aprobarea AI.
 8. Verifică `/health/live/` și `/health/ready/`; numai readiness `200` permite
    introducerea instanței în trafic.
 
@@ -54,6 +64,13 @@ izolat de rețea și accesibil numai superuserului, folosește
 - storage accesibil;
 - cozile operaționale inspectabile și fără elemente netriate; orice element
   pending/retry sau eșuat produce avertisment și blochează modul `--strict`.
+- Tesseract și parametrii OCR trec verificările de sistem, iar cozile de citire
+  pending/retry/blocate/eșuate sunt raportate;
+- cozile arhivelor lunare pending/retry/blocate/eșuate sunt raportate
+  întotdeauna; cozile de extragere structurată sunt raportate când AI este
+  activat;
+- dacă AI este activat, providerul, modelul, timeout-ul și cheia necesară trec
+  verificările de sistem. Readiness nu trimite documente către provider.
 
 Fișierele inbox disponibile pentru clasificare, erorile istorice și loturile
 încă deschise sunt raportate separat ca volum de business și nu blochează un
@@ -89,6 +106,9 @@ versionare și retention policy; dump-ul PostgreSQL nu conține obiectele R2.
 Release-ul de producție rămâne blocat până există dovezi pentru:
 
 - validarea juridică a matricei de retenție și DPA-urilor;
+- pentru AI: DPA/subprocesatori, regiunea și politica de retenție a
+  providerului, setul de evaluare reprezentativ, pragurile de acceptanță,
+  bugetul/alertele de cost și procedura de incident/dezactivare;
 - alegerea regiunii UE și contractele providerilor;
 - testul real de backup/restore și valorile RPO/RTO;
 - domeniile finale, certificatul TLS și decizia HSTS preload/subdomenii;

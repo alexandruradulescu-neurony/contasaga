@@ -1,5 +1,12 @@
 from django.urls import path
 
+from .archive_views import arhiva_manifest
+from .classification_views import (
+    clasifica_inbox,
+    coada_clasificare_inbox,
+    ignora_inbox,
+    separa_inbox,
+)
 from .inbox_views import (
     inbox_fisier_descarcare,
     inbox_fisier_finalizare,
@@ -37,7 +44,24 @@ from .views import (
 )
 
 urlpatterns = [
+    path("arhive/<uuid:arhiva_id>/manifest.csv", arhiva_manifest, name="arhiva_manifest"),
     path("verificare/", verificare_documente, name="verificare_documente"),
+    path("inbox/clasificare/", coada_clasificare_inbox, name="coada_clasificare_inbox"),
+    path(
+        "inbox/fisiere/<uuid:fisier_id>/clasifica/",
+        clasifica_inbox,
+        name="clasifica_inbox",
+    ),
+    path(
+        "inbox/fisiere/<uuid:fisier_id>/ignora/",
+        ignora_inbox,
+        name="ignora_inbox",
+    ),
+    path(
+        "inbox/fisiere/<uuid:fisier_id>/separa/",
+        separa_inbox,
+        name="separa_inbox",
+    ),
     path(
         "perioade/<uuid:perioada_id>/inbox/",
         inbox_perioada,

@@ -10,7 +10,7 @@ from conturi.models import Utilizator
 from core.audit import context_audit_din_request
 from core.models import IstoricStare
 from documente.forms import DocumentNouForm
-from documente.models import Document, FisierInbox
+from documente.models import ArhivaLunara, Document, FisierInbox
 from documente.services import poate_incarca_documente
 from exporturi.models import Export
 from exporturi.services import poate_solicita_export
@@ -163,6 +163,9 @@ def perioada_detaliu(request, perioada_id):
         perioada_contabila=perioada,
         status=FisierInbox.Status.DISPONIBIL,
     ).count()
+    arhive_lunare = list(
+        ArhivaLunara.objects.filter(perioada_contabila=perioada).order_by("-versiune")[:10]
+    )
     clarificari = sum(
         document.stare == Document.Stare.NECESITA_CLARIFICARI for document in documente_curente
     )
@@ -268,6 +271,7 @@ def perioada_detaliu(request, perioada_id):
             "documente_restante": documente_curente[12:],
             "documente_anulate": documente_anulate,
             "fisiere_inbox": fisiere_inbox,
+            "arhive_lunare": arhive_lunare,
             "cerinte_total": cerinte_total,
             "cerinte_complete": cerinte_complete,
             "cerinte_ramase": cerinte_ramase,

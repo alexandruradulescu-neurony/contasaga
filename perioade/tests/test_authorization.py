@@ -72,6 +72,7 @@ class PeriodAuthorizationTests(SimpleTestCase):
             "documente_incomplete",
             "gata_pentru_verificare",
             "in_lucru",
+            "inchidere_in_curs",
             "inchisa",
         }
         for actiune, tranzitii in TRANZITII_PERIOADA.items():
@@ -82,3 +83,6 @@ class PeriodAuthorizationTests(SimpleTestCase):
                     else:
                         with self.assertRaises(TranzitieInvalida):
                             stare_urmatoare(stare, actiune)
+
+    def test_closure_enters_locked_background_state(self):
+        self.assertEqual(stare_urmatoare("in_lucru", "inchide"), "inchidere_in_curs")

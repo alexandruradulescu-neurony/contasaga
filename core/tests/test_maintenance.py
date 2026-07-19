@@ -11,7 +11,12 @@ class ScheduledMaintenanceTests(SimpleTestCase):
         commands = [item.args[0] for item in nested_call.call_args_list]
         self.assertEqual(
             commands,
-            ["process_document_files", "retry_notification_emails", "process_exports"],
+            [
+                "process_document_files",
+                "process_document_analyses",
+                "retry_notification_emails",
+                "process_exports",
+            ],
         )
 
     @patch("core.management.commands.run_scheduled_maintenance.call_command")

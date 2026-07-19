@@ -387,7 +387,7 @@ def notifica_toate_clarificarile_rezolvate(*, perioada, actor, eveniment_id):
     )
 
 
-def notifica_perioada_inchisa(*, perioada, actor, eveniment_id):
+def notifica_perioada_inchisa(*, perioada, actor, eveniment_id, using="default"):
     programeaza_notificari(
         destinatari=destinatari_client_admin(perioada.firma_id),
         tip=Notificare.Tip.PERIOADA_INCHISA,
@@ -401,6 +401,7 @@ def notifica_perioada_inchisa(*, perioada, actor, eveniment_id):
         exclude_id=actor.pk,
         cu_email=True,
         subiect_email="Perioadă contabilă închisă",
+        using=using,
     )
 
 

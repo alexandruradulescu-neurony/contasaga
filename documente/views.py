@@ -23,6 +23,7 @@ from .access import (
     continut_local_semnat,
     url_acces_fisier,
 )
+from .extraction import sugestii_pentru_document
 from .forms import (
     AcceptareDocumentForm,
     ComentariuForm,
@@ -158,6 +159,9 @@ def document_detaliu(request, document_id):
         fisier.stare_procesare == FisierDocument.StareProcesare.PROCESAT
         for fisier in fisiere_active
     )
+    extractie, sugestii_extractie = sugestii_pentru_document(document)
+    if extractie and extractie.incredere is not None:
+        extractie.incredere_procent = round(float(extractie.incredere) * 100)
     return render(
         request,
         "documente/detaliu.html",
@@ -174,7 +178,11 @@ def document_detaliu(request, document_id):
             "istoric": IstoricStare.objects.filter(
                 entitate_tip="document", entitate_id=document.pk
             ),
-            "formular_acceptare": AcceptareDocumentForm(document=document),
+            "formular_acceptare": AcceptareDocumentForm(
+                document=document,
+                sugestii=sugestii_extractie,
+            ),
+            "extractie_structurata": extractie,
             "formular_mesaj": MesajForm(),
             "formular_motiv": MotivForm(),
             "formular_comentariu": ComentariuForm(),

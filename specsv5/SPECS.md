@@ -4,7 +4,7 @@
 > schema_starter.sql, roles.sql și suita de teste (istoric intern:
 > R1=v1–v3/design, R2=primul review extern, R3=al doilea, R4=al treilea,
 > R5=închiderea review-ului v5).
-> Baseline „as-built”, reconciliat la 18 iulie 2026 cu aplicația Django din
+> Baseline „as-built”, reconciliat la 19 iulie 2026 cu aplicația Django din
 > acest repository. Schema de referință este în `specsv5/schema_starter.sql`,
 > rolurile în `specsv5/roles.sql`, iar suita PostgreSQL/RLS în
 > `specsv5/test_rls.sh`. La conflict, migrările Django și schema instalată au
@@ -171,7 +171,9 @@ Stări finale: `arhivat`, `anulat`. Anularea NU e posibilă din `acceptat`,
 | `gata_pentru_verificare` | începe verificarea | `in_lucru` | contabil | — | |
 | `in_lucru` / `gata_pentru_verificare` | cere clarificări (≥1 doc) | `documente_incomplete` | contabil | — | notifică clientul |
 | `documente_incomplete` | toate clarificările rezolvate | `in_lucru` | sistem | niciun doc în `necesita_clarificari` | notifică contabilul |
-| `in_lucru` | închidere | `inchisa` | contabil | TOATE documentele în `procesat`, `anulat` sau `arhivat` (arhivatele provin dintr-o închidere anterioară — cazul redeschiderii); TOATE cerințele în `primit`/`nu_se_aplica`; niciun `draft` și nicio digitizare `in_lucru` | `procesat`→`arhivat`; `inchisa_la/de`; notifică clientul |
+| `in_lucru` | cere închiderea | `inchidere_in_curs` | contabil | TOATE documentele în `procesat`, `anulat` sau `arhivat` (arhivatele provin dintr-o închidere anterioară — cazul redeschiderii); TOATE cerințele în `primit`/`nu_se_aplica`; nicio digitizare `in_lucru` și niciun fișier inbox în `in_asteptare`/`disponibil` | blochează editarea și programează arhiva lunară după commit |
+| `inchidere_in_curs` | publică arhiva verificată | `inchisa` | sistem/worker | toate copiile și manifestul au checksum valid | `procesat`→`arhivat`; `inchisa_la/de`; notifică clientul |
+| `inchidere_in_curs` | eșec definitiv arhivă | `in_lucru` | sistem/worker | 3 încercări epuizate | deblochează luna; istoric + audit cu eroarea |
 | `inchisa` | redeschidere | `in_lucru` | admin_cabinet, contabil_coordonator | motiv obligatoriu | documentele `arhivat` RĂMÂN arhivate; se pot adăuga documente noi; audit obligatoriu |
 
 Toate tranzițiile trec prin servicii (`perioade/services.py`,
@@ -181,7 +183,7 @@ direct din view = interzis.
 
 ---
 
-## 5. Introducerea metadatelor (fără OCR în MVP)
+## 5. Introducerea metadatelor și sugestia AI
 
 - **Clientul** completează la upload doar: tip document (+ cont financiar
   unde se cere) și, opțional, o notă.
@@ -192,6 +194,21 @@ direct din view = interzis.
   proteja). Pentru `extras_cont`: doar contul (setat deja la upload).
 - Duplicatele: `IntegrityError` pe `uq_doc_business` → mesaj prietenos cu
   link către documentul existent.
+- **Inboxul necategorizat** poate primi o sugestie AI pentru tip, cont și
+  direcție. Sugestia nu creează documente și nu schimbă stări contabile.
+  Contabilul trebuie să confirme, să corecteze sau să ignore explicit, iar
+  decizia finală este auditată. Fără cheie/provider, același formular rămâne
+  complet utilizabil manual.
+- **Extragerea structurată** sugerează pentru documentele aflate în verificare:
+  emitent/destinatar și CUI, serie, număr, data documentului/scadenței, monedă,
+  net, TVA și total. Schema providerului este strictă, iar serviciul
+  normalizează datele/moneda/zecimalele, elimină valorile invalide și
+  semnalează neconcordanțe de total, scadență sau CUI. Formularul poate fi
+  precompletat, dar contabilul confirmă sau corectează explicit; se păstrează
+  fingerprint-ul fișierelor sursă, sugestia, valorile finale, providerul,
+  modelul, promptul, actorul și momentul revizuirii. După trei erori se
+  continuă manual. Cu `DOCUMENT_AI_ENABLED=false` nu se creează joburi de
+  extracție structurată și nu se face niciun apel extern.
 - **Administrarea partenerilor**: listă per firmă (contabil), creare inline
   din formularul de acceptare, dezactivare (nu ștergere). Faza 2: verificare
   CUI la ANAF.
@@ -205,10 +222,12 @@ direct din view = interzis.
 | Framework | **Django 5.2 LTS** + Django Templates; Gunicorn/WhiteNoise în producție |
 | Limbaj | Python 3.12+ |
 | DB | PostgreSQL 16+ |
-| Lucru în fundal | comenzi Django; coadă în PostgreSQL pentru exporturi; `launchd` opțional pe macOS |
+| Lucru în fundal | comenzi Django; cozi PostgreSQL pentru procesare, citire/AI, extracție, arhive și exporturi; `launchd` opțional pe macOS |
 | Storage | backend propriu local sau Cloudflare R2 prin `boto3`, cu URL-uri semnate |
-| PDF | PyMuPDF (validare, număr de pagini, thumbnail) |
+| PDF | PyMuPDF (validare, text, preview, separare, pagini, thumbnail) |
 | Imagini | Pillow |
+| OCR local | Tesseract 5, limbi `ron+eng` |
+| AI documente | adaptor propriu OpenAI Responses / DeepSeek-compatible Chat Completions; coadă PostgreSQL |
 | Email | backend-ul Django console în local; SMTP configurabil prin variabile de mediu |
 | Testare | pytest + pytest-django |
 | Calitate | ruff + ruff format; comandă automată `release_readiness` |
@@ -456,6 +475,10 @@ rotația rămâne o operațiune separată prin secret manager.
 - `retentie_ani` este NULL sau minimum 5 ani; o extensie per document nu
   poate scurta termenul legal; tabelele viitoare rămân fără DELETE pentru
   `app_user`
+- extragerile structurate, arhivele lunare și intrările manifestului sunt
+  vizibile numai în tenantul propriu; `app_user` nu le poate fabrica sau
+  modifica, iar FK-urile compuse interzic surse din altă firmă/perioadă;
+  stările `in_lucru` cer lease coerent și revizuirea extracției cere actor + dată
 
 RLS e plasa de siguranță, nu scuza: filtrele explicite pe firmă se scriu
 oricum în ORM.
@@ -471,7 +494,8 @@ singur document”. Un upload cu N facturi creează astfel N documente, iar
 fotografiile mai multor pagini ale aceleiași facturi rămân fișiere ale unui
 singur document. Seriile pot fi repetate până la închiderea perioadei, au cel
 mult 500 de fișiere și sunt trimise atomic; contabilul primește o singură
-notificare pentru întreaga serie. Un PDF nu este separat automat.
+notificare pentru întreaga serie. Un PDF din inbox poate primi sugestii de
+separare, dar nu este separat fără confirmarea explicită a contabilului.
 
 **Câmpuri de pipeline** pe fișier: `stare_procesare`
 (`in_asteptare`/`in_lucru`/`procesat`/`eroare`), `eroare_procesare`,
@@ -492,9 +516,60 @@ SHA-256 înainte de a publica originalul în
 `clients/<firma>/<AAAA-LL>/inbox/<lot>/originals/<fisier>`. Intențiile
 temporare expiră după 24h, iar `cleanup_inbox_uploads` elimină obiectele
 abandonate. Originalele validate pot fi descărcate numai după verificarea RLS,
-printr-o adresă semnată cu expirare scurtă. Clasificarea nu este dedusă în
-această etapă; planul complet este în
+printr-o adresă semnată cu expirare scurtă. Publicarea creează idempotent un
+rând în `analize_fisiere_inbox`; planul complet este în
 `docs/BULK_INBOX_AND_MONTH_ARCHIVE.md`.
+
+**Analiză și clasificare asistată**: `analize_fisiere_inbox` păstrează separat
+starea procesării (`in_asteptare`/`in_lucru`/`finalizata`/`eroare`), lease-ul,
+maximum 3 încercări, providerul, modelul, versiunea promptului, tipul/contul/
+direcția sugerate, încrederea, rezumatul, dovezile și consumul de tokeni.
+`process_document_analyses` execută mai întâi citirea locală și apoi, opțional,
+coada AI. Fiecare PDF este tratat pe pagini: textul încorporat suficient este
+folosit direct, iar paginile scanate și imaginile sunt citite cu Tesseract
+`ron+eng`. OpenAI primește PDF-ul ca file input sau imaginea ca image input;
+adaptorul DeepSeek primește textul local paginat, inclusiv rezultatul OCR.
+
+`pagini_fisiere_inbox` păstrează numărul paginii, metoda, textul extras,
+checksum-ul și cheia preview-ului privat. `limite_sugerate` poate veni dintr-o
+euristică conservatoare sau din providerul AI. Contabilul trebuie să confirme
+intervale complete, ordonate, fără goluri sau suprapuneri. Serviciul de separare
+creează câte un document/fișier derivat per interval, iar
+`derivari_fisiere_inbox` păstrează sursa imuabilă, intervalul, metoda, actorul și
+checksum-urile sursei și derivatului. Imaginile pot produce un singur interval.
+
+Rezultatul providerului este neîncrezător față de instrucțiunile din document,
+este validat față de tipurile și conturile configurate în tenant și nu are
+drept de scriere în documentele contabile. Revizuirea contabilului salvează
+`confirmata`, `corectata`, `segmentata` sau `ignorata`, identitatea și momentul deciziei,
+valorile finale și, la clasificare, legătura spre documentul creat. Originalul
+inbox rămâne imuabil și verificat din nou prin SHA-256 înainte de copiere.
+RLS permite rolului web doar SELECT tenant-scoped asupra analizelor; workerul
+privilegiat execută procesarea și serviciul reverifică rolul/apartenența înainte
+de orice confirmare. `DOCUMENT_AI_ENABLED=false` este implicit și garantează
+că nu se face niciun apel extern fără configurare explicită.
+
+**Extracție structurată și revizuire**:
+`extractii_structurate_documente` este legată de document, firmă, perioadă și
+fișierul principal, iar `fisiere_sursa` + `checksum_sursa` fixează versiunea
+tuturor fișierelor active folosite. Coada are lease de 15 minute, maximum trei
+încercări și recuperare pentru rândurile `in_lucru` abandonate. Rezultatul
+păstrează `campuri_sugerate`, avertismentele, încrederea și metadatele
+providerului; revizuirea păstrează `confirmata`/`corectata`/`manuala`,
+`campuri_finale`, actorul și data. Acceptarea documentului este blocată cât
+timp o extracție existentă încă rulează sau mai poate fi reîncercată, dar nu
+depinde de AI dacă nu există un job. RLS oferă rolului web numai SELECT
+tenant-scoped; toate mutațiile cozii sunt privilegiate.
+
+**Arhiva lunară materializată**: `arhive_lunare` păstrează versiunea,
+starea/lease-ul, prefixurile staging/final, checksum-ul manifestului, numărul și
+dimensiunea fișierelor. `fisiere_arhiva_lunara` este manifestul relațional și
+leagă fiecare copie de documentul și fișierul-sursă din aceeași firmă/perioadă,
+cu checksum sursă = checksum arhivă. Calea finală este
+`clients/<firma>/<AAAA-LL>/archive/vNNNN/<primite|emise|fara-directie>/<tip>/`;
+artefactele tehnice sunt sub `.system`, iar manifestul CSV final este scris
+ultimul ca marcaj de publicare. Numele includ o secvență, metadate lizibile
+când există și UUID-ul scurt al fișierului pentru evitarea coliziunilor.
 
 **Flux** (R5 — cu upload intent server-side, D13):
 1. UI-ul creează mai întâi obiectul `documente` în stare `draft`, apoi cere
@@ -548,7 +623,17 @@ această etapă; planul complet este în
    `categorie/tip-document/`, conține `manifest.csv`, reverifică checksum-ul
    surselor, expiră după 7 zile și notifică solicitantul la finalizare.
    `python manage.py cleanup_expired_exports` șterge exporturile expirate.
-6. Scanare malware: în MVP — validare strictă de tip + deschiderea efectivă
+6. **Închiderea/arhiva lunară**: solicitarea contabilului trece perioada în
+   `inchidere_in_curs` în tranzacția web, apoi programează jobul numai după
+   commit pentru a evita blocarea încrucișată între conexiunea RLS și worker.
+   Workerul copiază în staging, verifică SHA-256, publică copiile finale și
+   scrie manifestul ultimul. Într-o tranzacție privilegiată marchează
+   documentele `arhivat`, arhiva `finalizata` și perioada `inchisa`; o versiune
+   anterioară devine `inlocuita`, fără ștergere. Lease-ul recuperează joburile
+   întrerupte; după trei eșecuri perioada revine în `in_lucru` cu istoric și
+   audit. `process_document_analyses --watch` procesează această coadă chiar
+   dacă AI este dezactivat.
+7. Scanare malware: în MVP — validare strictă de tip + deschiderea efectivă
    a fișierelor în pipeline (corupte → `eroare`); ClamAV = faza 2. În
    producție fișierele nu se servesc niciodată direct din domeniul
    aplicației: accesul se face prin presigned GET R2 cu expirare scurtă și
@@ -700,26 +785,28 @@ care apelează serviciile privilegiate doar pentru scrierile administrative
 
 Baseline-ul curent conține două niveluri complementare de testare:
 
-- **84 de verificări PostgreSQL/RLS** în `specsv5/test_rls.sh`, pe topologia
+- **124 verificări PostgreSQL/RLS** în `specsv5/test_rls.sh`, pe topologia
   cu `migrare` owner non-superuser, `web_app` protejat de RLS și `worker`
   privilegiat. Suita reconstruiește baza de test și verifică provisioningul,
   granturile, izolarea tenanturilor, constrângerile și tabelele adăugate
-  pentru notificări, exporturi și predări;
-- **95 de teste Django/pytest** pentru autorizare și servicii, limitarea
+  pentru notificări, exporturi, predări, inbox, analiza AI, pagini OCR,
+  derivări, extrageri structurate și arhive lunare;
+- **137 teste Django/pytest** pentru autorizare și servicii, limitarea
   autentificării, schimbarea/resetarea parolei, health/readiness, setările de producție, operațiile
   periodice, rollback-ul și protecția streaming din middleware-ul RLS,
   autentificare/rutare DB,
-  perioade, documente, upload și procesare, notificări/remindere, exporturi
-  și logistică.
+  perioade, documente, upload și procesare, normalizarea extragerilor,
+  manifestul/arhiva lunară, notificări/remindere, exporturi și logistică.
 
-Aceste numere descriu testele existente după auditul complet din 18 iulie 2026;
+Aceste numere descriu testele existente după integrarea Phases 4–5 din 19 iulie 2026;
 orice test adăugat ulterior trebuie reflectat aici. Auditul de release trebuie
 să verifice în continuare matricea completă rol × operație și scenariile de
 eșec/concurență înaintea lansării în producție.
 
 ## 15. Ce NU facem în MVP
 
-Integrare SAGA; OCR/extracție automată; permisiuni granulare (tabele
+Integrare SAGA; separare sau contabilizare automată fără revizuire umană;
+permisiuni granulare (tabele
 roluri/permisiuni); cutii cu QR; e-Factura/ANAF; aplicație mobilă nativă;
 rapoarte avansate; ClamAV.
 
@@ -730,12 +817,17 @@ limitare partajată și
 admin-ul separat, utilizatorii/invitațiile/alocările, firmele cliente și
 configurarea checklist-ului, perioadele și tranzițiile lor, documentele și
 comentariile, upload-ul local/R2 cu procesare și versiuni, dashboard-ul și
-coada de verificare, notificările/emailurile/reminderele, exportul ZIP și
-predările de documente, setările de producție, health/readiness, verificarea
-automată de release și joburile periodice fără Docker.
+coada de verificare, inboxul multiplu, citirea OCR locală, preview-urile,
+separarea confirmată de contabil și clasificarea manuală/AI asistată cu
+revizuire umană, extracția structurată cu confirmare/corectare umană, arhiva
+lunară versionată cu manifest și checksum, notificările/emailurile/reminderele,
+exportul ZIP și predările de documente, setările de producție,
+health/readiness, verificarea automată de release și joburile periodice fără
+Docker.
 
 Nu fac parte din implementarea curentă: Docker, Redis, Celery, deschiderea
-automată lunară a perioadelor, OCR, ClamAV și observabilitatea de producție.
+automată lunară a perioadelor, contabilizarea/postarea automată în SAGA,
+ClamAV și observabilitatea de producție.
 Înainte de lansare rămân porțile externe din `docs/RELEASE_READINESS.md`:
 configurarea providerilor și domeniilor reale, testul backup/restore,
 monitorizarea operațională și validarea juridică a matricei de retenție.

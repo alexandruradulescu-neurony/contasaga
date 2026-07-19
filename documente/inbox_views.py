@@ -52,7 +52,11 @@ def inbox_perioada(request, perioada_id):
             "loturi": loturi,
             "poate_incarca": bool(
                 poate_incarca_documente(request.user)
-                and perioada.stare != PerioadaContabila.Stare.INCHISA
+                and perioada.stare
+                not in {
+                    PerioadaContabila.Stare.INCHIDERE_IN_CURS,
+                    PerioadaContabila.Stare.INCHISA,
+                }
             ),
             "max_fisiere": settings.DOCUMENT_BATCH_MAX_FILES,
             "max_mb_fisier": settings.DOCUMENT_UPLOAD_MAX_BYTES // (1024 * 1024),

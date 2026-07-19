@@ -51,3 +51,13 @@ def cheie_original_inbox(
 ) -> str:
     prefix = prefix_lunar(firma_id=firma_id, an=an, luna=luna)
     return f"{prefix}/inbox/{lot_id}/originals/{fisier_id}"
+
+
+def prefix_arhiva_staging(*, firma_id, an: int, luna: int, versiune: int) -> str:
+    prefix = prefix_lunar(firma_id=firma_id, an=an, luna=luna)
+    return f"{prefix}/.system/staging/archive-v{int(versiune):04d}"
+
+
+def prefix_arhiva_finala(*, firma_id, an: int, luna: int, versiune: int) -> str:
+    prefix = prefix_lunar(firma_id=firma_id, an=an, luna=luna)
+    return f"{prefix}/archive/v{int(versiune):04d}"

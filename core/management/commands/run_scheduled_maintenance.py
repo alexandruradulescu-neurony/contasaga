@@ -11,6 +11,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["mode"] == "frequent":
             call_command("process_document_files", limit=100, stdout=self.stdout)
+            call_command("process_document_analyses", limit=20, stdout=self.stdout)
             call_command("retry_notification_emails", limit=100, stdout=self.stdout)
             call_command("process_exports", limit=20, stdout=self.stdout)
         else:

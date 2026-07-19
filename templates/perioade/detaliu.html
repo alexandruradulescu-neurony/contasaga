@@ -18,7 +18,7 @@
     </div>
     <div class="page-header__actions">
         <span class="status status--{{ perioada.stare }}">{{ perioada.get_stare_display }}</span>
-        {% if poate_incarca_documente and perioada.stare != "inchisa" %}<a class="btn" href="{% url 'inbox_perioada' perioada.id %}">Încarcă mai multe fișiere</a>{% endif %}
+        {% if poate_incarca_documente and perioada.stare != "inchisa" and perioada.stare != "inchidere_in_curs" %}<a class="btn" href="{% url 'inbox_perioada' perioada.id %}">Încarcă mai multe fișiere</a>{% endif %}
         {% if user.rol == "client_admin" and perioada.stare == "deschisa" %}
             {% if poate_confirma_complet %}
                 <form method="post" action="{% url 'perioada_confirmare' perioada.id %}">
@@ -84,6 +84,13 @@
                 <p class="next-step__text">Te vom notifica dacă sunt necesare clarificări sau când luna este închisă.</p>
             </div>
         </section>
+    {% elif perioada.stare == "inchidere_in_curs" %}
+        <section class="next-step next-step--info">
+            <div>
+                <p class="next-step__title">Arhiva lunară este în pregătire</p>
+                <p class="next-step__text">Dosarul este blocat temporar. Verificăm copiile și manifestul înainte de a închide luna.</p>
+            </div>
+        </section>
     {% elif perioada.stare == "inchisa" %}
         <section class="next-step">
             <div>
@@ -110,7 +117,27 @@
         <section class="next-step next-step--warning">
             <div><p class="next-step__title">Aștepți răspunsul clientului</p><p class="next-step__text">{{ clarificari }} documente au clarificări deschise.</p></div>
         </section>
+    {% elif perioada.stare == "inchidere_in_curs" %}
+        <section class="next-step next-step--info">
+            <div><p class="next-step__title">Închiderea rulează în fundal</p><p class="next-step__text">Documentele sunt copiate în arhiva lunară și verificate prin checksum înainte de publicare.</p></div>
+        </section>
     {% endif %}
+{% endif %}
+
+{% if arhive_lunare %}
+<section class="panel" id="arhive-lunare">
+    <div class="panel-header"><div><p class="eyebrow">Fișiere pe disc</p><h2>Arhive lunare</h2></div></div>
+    <div class="document-list">
+        {% for arhiva in arhive_lunare %}
+        <article class="document-row">
+            <div><h3 class="document-row__title">Versiunea {{ arhiva.versiune }}</h3><p class="document-row__meta">{{ arhiva.prefix_final }}</p></div>
+            <div><strong>{{ arhiva.numar_fisiere }} fișiere</strong><p class="document-row__meta">{{ arhiva.dimensiune_totala|filesizeformat }}</p></div>
+            <div><span class="status status--{{ arhiva.status }}">{{ arhiva.get_status_display }}</span></div>
+            {% if arhiva.status == "finalizata" or arhiva.status == "inlocuita" %}<a class="btn btn--secondary btn--small" href="{% url 'arhiva_manifest' arhiva.id %}">Descarcă manifestul</a>{% endif %}
+        </article>
+        {% endfor %}
+    </div>
+</section>
 {% endif %}
 
 {% if predare_digitizare_activa %}
@@ -155,7 +182,7 @@
                                 {% endif %}
                             </div>
                             <div class="task-row__action">
-                                {% if poate_incarca_documente and perioada.stare != "inchisa" and cerinta.status != "nu_se_aplica" %}
+                                {% if poate_incarca_documente and perioada.stare != "inchisa" and perioada.stare != "inchidere_in_curs" and cerinta.status != "nu_se_aplica" %}
                                     <form method="post" action="{% url 'document_nou' perioada.id %}">
                                         {% csrf_token %}
                                         {% if predare_digitizare_activa %}<input type="hidden" name="predare_documente" value="{{ predare_digitizare_activa.id }}">{% endif %}
@@ -165,7 +192,7 @@
                                         <button class="btn btn--secondary btn--small" type="submit">{% if cerinta.numar_documente %}Adaugă o serie{% else %}Încarcă documente{% endif %}</button>
                                     </form>
                                 {% endif %}
-                                {% if poate_actualiza and perioada.stare != "inchisa" %}
+                                {% if poate_actualiza and perioada.stare != "inchisa" and perioada.stare != "inchidere_in_curs" %}
                                     {% if user.rol == "client_admin" or user.rol == "client_operator" %}
                                         {% if cerinta.status == "partial" %}
                                             <form method="post" action="{% url 'cerinta_actualizare' cerinta.id %}" style="margin-top: .45rem;">
@@ -182,7 +209,7 @@
                                 {% endif %}
                             </div>
                         </article>
-                        {% if poate_actualiza and perioada.stare != "inchisa" %}
+                        {% if poate_actualiza and perioada.stare != "inchisa" and perioada.stare != "inchidere_in_curs" %}
                             {% if user.rol == "client_admin" or user.rol == "client_operator" %}
                                 {% if cerinta.status == "lipsa" or cerinta.status == "partial" %}
                                     <details class="disclosure" style="padding: 0 1rem;">
@@ -223,7 +250,7 @@
         <section id="documente" class="panel">
             <div class="panel-header">
                 <div><p class="eyebrow">Fișiere și lucru în curs</p><h2>Documentele lunii · {{ documente|length }}</h2></div>
-                {% if poate_incarca_documente and perioada.stare != "inchisa" %}<div class="action-row"><a class="btn btn--secondary btn--small" href="{% url 'inbox_perioada' perioada.id %}">Inbox încărcări</a><a class="btn btn--ghost btn--small" href="#document-nou">Document clasificat</a></div>{% endif %}
+                {% if poate_incarca_documente and perioada.stare != "inchisa" and perioada.stare != "inchidere_in_curs" %}<div class="action-row"><a class="btn btn--secondary btn--small" href="{% url 'inbox_perioada' perioada.id %}">Inbox încărcări</a><a class="btn btn--ghost btn--small" href="#document-nou">Document clasificat</a></div>{% endif %}
             </div>
             {% if fisiere_inbox %}<section class="next-step"><div><p class="next-step__title">{{ fisiere_inbox }} fișiere așteaptă clasificarea</p><p class="next-step__text">Au fost încărcate ca original necategorizat și sunt păstrate în inboxul acestei luni.</p></div><a class="btn btn--secondary btn--small" href="{% url 'inbox_perioada' perioada.id %}">Deschide inboxul</a></section>{% endif %}
             {% if documente %}
@@ -240,7 +267,7 @@
                 <div class="empty-state"><span class="empty-state__icon">↑</span><h2>Niciun document încărcat</h2><p>Alege „Încarcă document” din checklist pentru ca tipul și contul să fie completate automat.</p></div>
             {% endif %}
 
-            {% if poate_incarca_documente and perioada.stare != "inchisa" %}
+            {% if poate_incarca_documente and perioada.stare != "inchisa" and perioada.stare != "inchidere_in_curs" %}
                 <details id="document-nou" class="disclosure">
                     <summary>Încarcă un document care nu apare în checklist</summary>
                     <div class="disclosure__box">
@@ -304,18 +331,18 @@
                                         {% if predare.digitizare_status == "nedecisa" %}
                                             <p class="muted text-small">Alege dacă documentele fizice trebuie păstrate și în platformă. Decizia poate rămâne „nu este necesară”.</p>
                                             {% if poate_gestiona_predari %}
-                                                {% if perioada.stare != "inchisa" %}<form method="post" action="{% url 'predare_digitizare_incepe' predare.id %}">{% csrf_token %}<label for="estimare-start-{{ predare.id }}">Număr estimat de documente <span class="muted">(opțional)</span></label><input id="estimare-start-{{ predare.id }}" type="number" min="1" name="numar_documente_estimat"><div class="form-actions"><button class="btn btn--small" type="submit">Începe digitizarea</button></div></form>{% endif %}
+                                                {% if perioada.stare != "inchisa" and perioada.stare != "inchidere_in_curs" %}<form method="post" action="{% url 'predare_digitizare_incepe' predare.id %}">{% csrf_token %}<label for="estimare-start-{{ predare.id }}">Număr estimat de documente <span class="muted">(opțional)</span></label><input id="estimare-start-{{ predare.id }}" type="number" min="1" name="numar_documente_estimat"><div class="form-actions"><button class="btn btn--small" type="submit">Începe digitizarea</button></div></form>{% endif %}
                                                 <form method="post" action="{% url 'predare_digitizare_omite' predare.id %}" style="margin-top: .5rem;">{% csrf_token %}<button class="btn btn--ghost btn--small" type="submit">Nu este necesară digitizarea</button></form>
                                             {% endif %}
                                         {% elif predare.digitizare_status == "nu_este_necesara" %}
                                             <p class="muted text-small">Originalele sunt urmărite logistic, fără copii digitale legate de această predare.</p>
-                                            {% if poate_gestiona_predari and perioada.stare != "inchisa" %}<form method="post" action="{% url 'predare_digitizare_incepe' predare.id %}">{% csrf_token %}<input type="hidden" name="numar_documente_estimat" value=""><button class="btn btn--secondary btn--small" type="submit">Digitizează totuși</button></form>{% endif %}
+                                            {% if poate_gestiona_predari and perioada.stare != "inchisa" and perioada.stare != "inchidere_in_curs" %}<form method="post" action="{% url 'predare_digitizare_incepe' predare.id %}">{% csrf_token %}<input type="hidden" name="numar_documente_estimat" value=""><button class="btn btn--secondary btn--small" type="submit">Digitizează totuși</button></form>{% endif %}
                                         {% elif predare.digitizare_status == "in_lucru" %}
                                             <div class="digitization__metrics"><span><strong>{{ predare.statistici_digitizare.documente_digitizate }}</strong> documente digitizate</span><span><strong>{{ predare.statistici_digitizare.fisiere_digitizate }}</strong> fișiere</span>{% if predare.numar_documente_estimat %}<span><strong>{{ predare.numar_documente_estimat }}</strong> estimate</span>{% endif %}</div>
                                             {% if predare.progres_digitizare != None %}<div class="progress"><span class="progress__bar" style="width: {{ predare.progres_digitizare }}%"></span></div>{% endif %}
                                             {% if predare.digitizare_inceputa_la %}<p class="helptext">Începută {{ predare.digitizare_inceputa_la|date:"j M Y, H:i" }}{% if predare.digitizare_inceputa_de_nume %} de {{ predare.digitizare_inceputa_de_nume }}{% endif %}</p>{% endif %}
                                             {% if poate_gestiona_predari %}
-                                                <div class="form-actions">{% if perioada.stare != "inchisa" %}<a class="btn btn--small" href="{% url 'perioada_detaliu' perioada.id %}?predare={{ predare.id }}#checklist">Continuă digitizarea</a>{% endif %}<form method="post" action="{% url 'predare_digitizare_finalizare' predare.id %}">{% csrf_token %}<button class="btn btn--secondary btn--small" type="submit"{% if not predare.poate_finaliza_digitizarea %} disabled{% endif %}>Finalizează digitizarea</button></form></div>
+                                                <div class="form-actions">{% if perioada.stare != "inchisa" and perioada.stare != "inchidere_in_curs" %}<a class="btn btn--small" href="{% url 'perioada_detaliu' perioada.id %}?predare={{ predare.id }}#checklist">Continuă digitizarea</a>{% endif %}<form method="post" action="{% url 'predare_digitizare_finalizare' predare.id %}">{% csrf_token %}<button class="btn btn--secondary btn--small" type="submit"{% if not predare.poate_finaliza_digitizarea %} disabled{% endif %}>Finalizează digitizarea</button></form></div>
                                                 {% if not predare.poate_finaliza_digitizarea %}<p class="helptext">Finalizarea cere cel puțin un document și toate fișierele legate procesate cu succes{% if predare.numar_documente_estimat %}, până la estimarea declarată{% endif %}.</p>{% endif %}
                                                 <details class="disclosure"><summary>Actualizează estimarea</summary><div class="disclosure__box"><form method="post" action="{% url 'predare_digitizare_estimare' predare.id %}">{% csrf_token %}<label for="estimare-{{ predare.id }}">Număr estimat</label><input id="estimare-{{ predare.id }}" type="number" min="1" name="numar_documente_estimat" value="{{ predare.numar_documente_estimat|default_if_none:'' }}"><div class="form-actions"><button class="btn btn--secondary btn--small" type="submit">Salvează estimarea</button></div></form></div></details>
                                                 {% if not predare.statistici_digitizare.documente_total %}<form method="post" action="{% url 'predare_digitizare_omite' predare.id %}">{% csrf_token %}<button class="btn btn--ghost btn--small" type="submit">Renunță la digitizare</button></form>{% endif %}
@@ -323,7 +350,7 @@
                                         {% elif predare.digitizare_status == "finalizata" %}
                                             <div class="digitization__metrics"><span><strong>{{ predare.statistici_digitizare.documente_digitizate }}</strong> documente</span><span><strong>{{ predare.statistici_digitizare.fisiere_digitizate }}</strong> fișiere</span></div>
                                             <p class="helptext">Finalizată {{ predare.digitizare_finalizata_la|date:"j M Y, H:i" }}{% if predare.digitizare_finalizata_de_nume %} de {{ predare.digitizare_finalizata_de_nume }}{% endif %}.</p>
-                                            {% if poate_gestiona_predari and perioada.stare != "inchisa" %}<form method="post" action="{% url 'predare_digitizare_redeschidere' predare.id %}">{% csrf_token %}<button class="btn btn--secondary btn--small" type="submit">Adaugă documente suplimentare</button></form>{% endif %}
+                                            {% if poate_gestiona_predari and perioada.stare != "inchisa" and perioada.stare != "inchidere_in_curs" %}<form method="post" action="{% url 'predare_digitizare_redeschidere' predare.id %}">{% csrf_token %}<button class="btn btn--secondary btn--small" type="submit">Adaugă documente suplimentare</button></form>{% endif %}
                                         {% endif %}
                                         {% if predare.documente_digitizare %}<details class="disclosure"><summary>Documente legate · {{ predare.documente_digitizare|length }}</summary><div class="disclosure__box">{% for document in predare.documente_digitizare %}<p class="text-small"><a class="link" href="{% url 'document_detaliu' document.id %}">{{ document.tip_document.denumire }}</a> · {{ document.get_stare_display }}</p>{% endfor %}</div></details>{% endif %}
                                     </div>
@@ -331,7 +358,7 @@
                             </article>
                         {% empty %}<p class="muted text-small">Nu există predări fizice pentru această lună.</p>{% endfor %}
                     </div>
-                    {% if poate_programa_predare and perioada.stare != "inchisa" %}
+                    {% if poate_programa_predare and perioada.stare != "inchisa" and perioada.stare != "inchidere_in_curs" %}
                         <details class="disclosure"><summary>Înregistrează o predare</summary><div class="disclosure__box"><form method="post" action="{% url 'predare_programare' perioada.id %}">{% csrf_token %}{{ formular_predare.as_p }}<div class="form-actions"><button type="submit">Salvează predarea</button></div></form></div></details>
                     {% endif %}
                 </div>

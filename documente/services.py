@@ -129,7 +129,11 @@ def poate_comenta_document(utilizator, document) -> bool:
         utilizator.is_active
         and utilizator.rol in ROLURI_INCARCARE
         and not document.sters_la
-        and document.perioada_contabila.stare != PerioadaContabila.Stare.INCHISA
+        and document.perioada_contabila.stare
+        not in {
+            PerioadaContabila.Stare.INCHIDERE_IN_CURS,
+            PerioadaContabila.Stare.INCHISA,
+        }
         and document.stare not in {Document.Stare.ANULAT, Document.Stare.ARHIVAT}
     )
 
@@ -244,8 +248,13 @@ def _sincronizeaza_checklist(*, cheie: CheieChecklist, actor, context: ContextAu
 
 
 def _verifica_perioada_editabila(document):
-    if document.perioada_contabila.stare == PerioadaContabila.Stare.INCHISA:
-        raise TranzitieDocumentInvalida("Documentele unei perioade închise sunt imuabile.")
+    if document.perioada_contabila.stare in {
+        PerioadaContabila.Stare.INCHIDERE_IN_CURS,
+        PerioadaContabila.Stare.INCHISA,
+    }:
+        raise TranzitieDocumentInvalida(
+            "Documentele nu pot fi modificate în timpul sau după închiderea perioadei."
+        )
     if document.sters_la:
         raise TranzitieDocumentInvalida("Documentul a fost șters.")
 
@@ -279,7 +288,10 @@ def creeaza_document(
         raise PermissionDenied
     with transaction.atomic(using="default"):
         perioada = PerioadaContabila.objects.select_for_update().get(pk=perioada_id)
-        if perioada.stare == PerioadaContabila.Stare.INCHISA:
+        if perioada.stare in {
+            PerioadaContabila.Stare.INCHIDERE_IN_CURS,
+            PerioadaContabila.Stare.INCHISA,
+        }:
             raise TranzitieDocumentInvalida("Nu poți încărca într-o perioadă închisă.")
         tip_document = TipDocument.objects.get(pk=tip_document_id, activ=True)
         cont_financiar = None
@@ -664,6 +676,12 @@ def accepta_document(
                     "retentie_extinsa_pana_la",
                 ]
             )
+            from .extraction import EroareRevizuireExtractie, revizuieste_extractie
+
+            try:
+                revizuieste_extractie(document=document, actor=actor)
+            except EroareRevizuireExtractie as exc:
+                raise TranzitieDocumentInvalida(str(exc)) from exc
             _schimba_starea(
                 document=document,
                 actor=actor,

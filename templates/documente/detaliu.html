@@ -142,6 +142,15 @@
         {% if poate_verifica and document.stare == "in_verificare" %}
             <section id="verificare" class="panel">
                 <div class="panel-header"><div><p class="eyebrow">Pasul contabilului</p><h2>Validează datele documentului</h2></div></div>
+                {% if extractie_structurata %}
+                    <div class="extraction-summary extraction-summary--{{ extractie_structurata.status }}">
+                        <div><strong>Citire structurată: {{ extractie_structurata.get_status_display }}</strong>{% if extractie_structurata.incredere_procent is not None %}<span>Încredere generală {{ extractie_structurata.incredere_procent }}%</span>{% endif %}</div>
+                        {% if extractie_structurata.status == "finalizata" %}<p>Formularul de mai jos este precompletat cu sugestiile modelului. Verifică fiecare valoare înainte de acceptare.</p>{% elif extractie_structurata.status == "eroare" and extractie_structurata.incercari >= 3 %}<p>Extragerea automată nu a reușit. Completează și validează manual documentul.</p>{% else %}<p>Extragerea rulează în fundal. Acceptarea devine disponibilă după rezultat; poți continua verificarea vizuală acum.</p>{% endif %}
+                        {% if extractie_structurata.avertismente %}<ul>{% for avertisment in extractie_structurata.avertismente %}<li>{{ avertisment }}</li>{% endfor %}</ul>{% endif %}
+                    </div>
+                {% else %}
+                    <p class="muted text-small">Nu există sugestii automate pentru această versiune. Completează și validează manual câmpurile.</p>
+                {% endif %}
                 <form method="post" action="{% url 'document_acceptare' document.id %}">
                     {% csrf_token %}{{ formular_acceptare.non_field_errors }}
                     <div class="form-grid">{% for field in formular_acceptare %}<div><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}</div>

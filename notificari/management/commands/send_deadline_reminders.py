@@ -55,7 +55,12 @@ class Command(BaseCommand):
         termene = (data_rulare, data_rulare + timedelta(days=3))
         perioade = list(
             PerioadaContabila.objects.using("privileged")
-            .exclude(stare=PerioadaContabila.Stare.INCHISA)
+            .exclude(
+                stare__in=(
+                    PerioadaContabila.Stare.INCHIDERE_IN_CURS,
+                    PerioadaContabila.Stare.INCHISA,
+                )
+            )
             .filter(termen_predare__in=termene)
             .annotate(
                 cerinte_lipsa=Count(

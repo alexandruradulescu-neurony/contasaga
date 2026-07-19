@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% load ux %}
+
+{% block title %}Clasificare inbox · Conta Saga{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb"><a href="{% url 'dashboard' %}">Acasă</a><span>/</span><span>Clasificare inbox</span></nav>
+
+<header class="page-header">
+    <div class="page-header__copy">
+        <p class="eyebrow">Inboxul contabilului</p>
+        <h1>Clasifică originalele primite</h1>
+        <p class="lede">Inteligența artificială propune o destinație, dar tu confirmi fiecare decizie înainte ca fișierul să devină document contabil.</p>
+    </div>
+</header>
+
+<section class="metric-grid" aria-label="Rezumat clasificare">
+    <article class="metric"><strong class="metric__value">{{ total }}</strong><span class="metric__label">fișiere de clasificat</span></article>
+    <article class="metric"><strong class="metric__value">{{ total_filtrat }}</strong><span class="metric__label">în filtrul curent</span></article>
+</section>
+
+<section class="panel" style="margin-bottom: 1rem;">
+    <details class="disclosure"{% if firma_selectata or status_ai_selectat or cautare %} open{% endif %}>
+        <summary>Filtrează inboxul</summary>
+        <div class="disclosure__box">
+            <form class="filter-bar filter-bar--classification" method="get">
+                <div><label for="q">Caută în nume sau textul citit</label><input id="q" name="q" type="search" value="{{ cautare }}" placeholder="Exemplu: Furnizor sau nr. factură"></div>
+                <div><label for="firma">Firmă clientă</label><select id="firma" name="firma"><option value="">Toate firmele</option>{% for firma in firme %}<option value="{{ firma.id }}"{% if firma_selectata == firma.id|stringformat:"s" %} selected{% endif %}>{{ firma.denumire }}</option>{% endfor %}</select></div>
+                <div><label for="status_ai">Analiză AI</label><select id="status_ai" name="status_ai"><option value="">Toate stările</option>{% for valoare, eticheta in statusuri_ai %}<option value="{{ valoare }}"{% if status_ai_selectat == valoare %} selected{% endif %}>{{ eticheta }}</option>{% endfor %}</select></div>
+                <button class="btn" type="submit">Aplică</button>
+            </form>
+        </div>
+    </details>
+</section>
+
+{% if fisiere %}
+<section class="classification-list">
+    {% for fisier in fisiere %}
+    <article class="classification-card">
+        <header class="classification-card__header">
+            <div>
+                <p class="eyebrow">{{ fisier.firma.denumire }} · {{ fisier.perioada_contabila.luna|luna_nume }} {{ fisier.perioada_contabila.an }}</p>
+                <h2>{{ fisier.nume_original }}</h2>
+                <p class="muted text-small">{{ fisier.dimensiune_bytes|filesizeformat }} · trimis de {{ fisier.incarcat_de_nume }} · {{ fisier.incarcat_la|date:"j F Y, H:i" }}</p>
+            </div>
+            <a class="btn btn--ghost btn--small" href="{% url 'inbox_fisier_descarcare' fisier.id %}">Descarcă originalul</a>
+        </header>
+
+        <div class="classification-grid">
+            <section class="ai-suggestion">
+                <div class="ai-suggestion__title">
+                    <h3>Sugestia sistemului</h3>
+                    <span class="status status--{{ fisier.analiza.status }}">{{ fisier.analiza.get_status_display }}</span>
+                </div>
+                {% if fisier.analiza.status == "finalizata" %}
+                    <dl class="summary-list">
+                        <div><dt>Tip</dt><dd>{{ fisier.analiza.tip_document_sugerat.denumire|default:"Necunoscut" }}</dd></div>
+                        <div><dt>Direcție</dt><dd>{{ fisier.analiza.get_directie_sugerata_display|default:"Necunoscută" }}</dd></div>
+                        <div><dt>Încredere</dt><dd>{% widthratio fisier.analiza.incredere 1 100 %}%</dd></div>
+                    </dl>
+                    {% if fisier.analiza.rezumat %}<p>{{ fisier.analiza.rezumat }}</p>{% endif %}
+                    {% if fisier.analiza.dovezi %}
+                    <details class="disclosure"><summary>Vezi indiciile folosite</summary><div class="disclosure__box evidence-list">{% for dovada in fisier.analiza.dovezi %}<blockquote>{% if dovada.page %}<strong>Pagina {{ dovada.page }}</strong> · {% endif %}{{ dovada.text }}</blockquote>{% endfor %}</div></details>
+                    {% endif %}
+                    <p class="muted text-small">{{ fisier.analiza.provider }} · {{ fisier.analiza.model }} · {{ fisier.analiza.versiune_prompt }}</p>
+                {% elif fisier.analiza.status == "eroare" %}
+                    <p class="text-danger">{{ fisier.analiza.eroare }}</p>
+                    <p class="muted text-small">Poți clasifica manual; activarea sau reîncercarea AI nu blochează lucrul.</p>
+                {% elif fisier.analiza.status == "in_lucru" %}
+                    <p class="muted">Analiza este în curs. Poți continua imediat cu clasificarea manuală.</p>
+                {% else %}
+                    <p class="muted">Analiza va porni după configurarea providerului. Clasificarea manuală este deja disponibilă.</p>
+                {% endif %}
+            </section>
+
+            <form class="classification-form" method="post" action="{% url 'clasifica_inbox' fisier.id %}">
+                {% csrf_token %}
+                <h3>Decizia contabilului</h3>
+                <div class="form-grid">
+                    <div><label for="{{ fisier.formular_clasificare.tip_document.id_for_label }}">{{ fisier.formular_clasificare.tip_document.label }}</label>{{ fisier.formular_clasificare.tip_document }}</div>
+                    <div><label for="{{ fisier.formular_clasificare.directie.id_for_label }}">{{ fisier.formular_clasificare.directie.label }}</label>{{ fisier.formular_clasificare.directie }}</div>
+                    <div class="form-grid__full"><label for="{{ fisier.formular_clasificare.cont_financiar.id_for_label }}">{{ fisier.formular_clasificare.cont_financiar.label }}</label>{{ fisier.formular_clasificare.cont_financiar }}<p class="helptext">Necesar numai pentru extrase, registre de casă și alte tipuri legate de un cont.</p></div>
+                    <div class="form-grid__full"><label for="{{ fisier.formular_clasificare.observatii.id_for_label }}">{{ fisier.formular_clasificare.observatii.label }}</label>{{ fisier.formular_clasificare.observatii }}</div>
+                </div>
+                <div class="form-actions"><button type="submit">Confirmă și deschide verificarea</button></div>
+            </form>
+        </div>
+
+        {% if fisier.analiza.status_citire == "finalizata" %}
+        <div class="classification-split-callout">
+            <div>
+                <strong>{{ fisier.analiza.numar_pagini }} pagină{{ fisier.analiza.numar_pagini|pluralize:"ă,i" }} citită{{ fisier.analiza.numar_pagini|pluralize:",e" }}</strong>
+                <p class="muted text-small">Deschide paginile dacă originalul conține mai multe documente sau dacă vrei să verifici textul citit.</p>
+            </div>
+            <a class="btn btn--secondary btn--small" href="{% url 'separa_inbox' fisier.id %}">Vezi paginile și separă</a>
+        </div>
+        {% elif fisier.analiza.status_citire == "eroare" %}
+        <p class="text-danger text-small">Citirea locală nu a reușit: {{ fisier.analiza.eroare_citire }}</p>
+        {% else %}
+        <p class="muted text-small">Paginile sunt pregătite în fundal. Clasificarea manuală rămâne disponibilă.</p>
+        {% endif %}
+
+        <details class="disclosure classification-ignore">
+            <summary>Fișierul nu este un document contabil</summary>
+            <div class="disclosure__box">
+                <form method="post" action="{% url 'ignora_inbox' fisier.id %}">
+                    {% csrf_token %}
+                    <label for="motiv-{{ fisier.id }}">Motiv obligatoriu</label>
+                    <textarea id="motiv-{{ fisier.id }}" name="motiv" maxlength="2000" rows="2" required placeholder="Exemplu: duplicat al altui fișier din lot"></textarea>
+                    <div class="form-actions"><button class="btn btn--secondary btn--small" type="submit">Păstrează în audit și ignoră</button></div>
+                </form>
+            </div>
+        </details>
+    </article>
+    {% endfor %}
+</section>
+
+{% if fisiere.paginator.num_pages > 1 %}
+<nav class="pagination" aria-label="Paginile cozii de clasificare">
+    <span class="pagination__summary">Pagina {{ fisiere.number }} din {{ fisiere.paginator.num_pages }}</span>
+    <div class="pagination__actions">{% if fisiere.has_previous %}<a class="btn btn--secondary btn--small" href="{% querystring pagina=fisiere.previous_page_number %}">Înapoi</a>{% endif %}{% if fisiere.has_next %}<a class="btn btn--secondary btn--small" href="{% querystring pagina=fisiere.next_page_number %}">Înainte</a>{% endif %}</div>
+</nav>
+{% endif %}
+{% else %}
+<section class="panel"><div class="empty-state"><span class="empty-state__icon">✓</span><h2>Inboxul este clasificat</h2><p>Fișierele noi încărcate de clienți vor apărea automat aici.</p></div></section>
+{% endif %}
+{% endblock %}

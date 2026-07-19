@@ -140,7 +140,10 @@ def initiaza_upload(
             pk=document.perioada_contabila_id
         )
         document = Document.objects.select_for_update(of=("self",)).get(pk=document.pk)
-        if perioada.stare == PerioadaContabila.Stare.INCHISA:
+        if perioada.stare in {
+            PerioadaContabila.Stare.INCHIDERE_IN_CURS,
+            PerioadaContabila.Stare.INCHISA,
+        }:
             raise EroareUpload("Perioada este închisă.")
         if not poate_atasa_fisiere(actor, document):
             raise PermissionDenied
@@ -244,7 +247,10 @@ def finalizeaza_upload(*, intentie_id, actor, context):
             pk=document.perioada_contabila_id,
             firma_id=document.firma_id,
         )
-        if perioada.stare == PerioadaContabila.Stare.INCHISA:
+        if perioada.stare in {
+            PerioadaContabila.Stare.INCHIDERE_IN_CURS,
+            PerioadaContabila.Stare.INCHISA,
+        }:
             raise EroareUpload("Perioada este închisă.")
         utilizator = _utilizator_cu_acces_privilegiat(actor=actor, document=document)
         if not poate_atasa_fisiere(utilizator, document):
@@ -364,7 +370,10 @@ def sterge_fisier(*, fisier_id, actor, context):
             pk=document.perioada_contabila_id,
             firma_id=document.firma_id,
         )
-        if perioada.stare == PerioadaContabila.Stare.INCHISA:
+        if perioada.stare in {
+            PerioadaContabila.Stare.INCHIDERE_IN_CURS,
+            PerioadaContabila.Stare.INCHISA,
+        }:
             raise EroareUpload("Perioada este închisă.")
         utilizator = _utilizator_cu_acces_privilegiat(actor=actor, document=document)
         if document.stare != Document.Stare.DRAFT or document.incarcat_de_id != utilizator.pk:

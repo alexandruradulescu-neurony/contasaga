@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% load ux %}
+
+{% block title %}Separă {{ fisier.nume_original }} · Conta Saga{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb"><a href="{% url 'dashboard' %}">Acasă</a><span>/</span><a href="{% url 'coada_clasificare_inbox' %}">Clasificare inbox</a><span>/</span><span>Separare</span></nav>
+
+<header class="page-header">
+    <div class="page-header__copy">
+        <p class="eyebrow">{{ fisier.firma.denumire }} · {{ fisier.perioada_contabila.luna|luna_nume }} {{ fisier.perioada_contabila.an }}</p>
+        <h1>Verifică și separă paginile</h1>
+        <p class="lede">Originalul rămâne intact. Fiecare interval confirmat va deveni un document distinct, cu checksum și legătură la paginile sursă.</p>
+    </div>
+    <a class="btn btn--ghost" href="{% url 'inbox_fisier_descarcare' fisier.id %}">Descarcă originalul</a>
+</header>
+
+<section class="panel split-source-summary">
+    <div><strong>{{ fisier.nume_original }}</strong><span>{{ fisier.dimensiune_bytes|filesizeformat }}</span></div>
+    <div><strong>{{ analiza.numar_pagini|default:"—" }}</strong><span>pagini</span></div>
+    <div><strong>{{ analiza.get_status_citire_display }}</strong><span>{{ analiza.metoda_citire|default:"citire în așteptare" }}</span></div>
+</section>
+
+{% if analiza.status_citire == "finalizata" %}
+<section class="page-preview-grid" aria-label="Paginile originalului">
+    {% for pagina in pagini %}
+    <article class="page-preview-card">
+        <a href="{{ pagina.preview_url }}" target="_blank" rel="noopener"><img src="{{ pagina.preview_url }}" alt="Pagina {{ pagina.numar_pagina }} din {{ fisier.nume_original }}"></a>
+        <div class="page-preview-card__body">
+            <strong>Pagina {{ pagina.numar_pagina }}</strong>
+            <span class="status">{{ pagina.get_metoda_display }}</span>
+            {% if pagina.text_extras %}<details class="disclosure"><summary>Text citit</summary><pre>{{ pagina.text_extras|truncatechars:3000 }}</pre></details>{% else %}<p class="muted text-small">Nu a fost detectat text lizibil.</p>{% endif %}
+        </div>
+    </article>
+    {% endfor %}
+</section>
+
+<form method="post" class="panel segmentation-form" id="segmentation-form">
+    {% csrf_token %}
+    {{ formular.management_form }}
+    <header class="section-heading">
+        <div><p class="eyebrow">Decizia contabilului</p><h2>Documentele rezultate</h2><p class="muted">Intervalele trebuie să acopere toate paginile, în ordine, fără goluri sau suprapuneri.</p></div>
+        <button class="btn btn--secondary btn--small" type="button" id="add-segment">Adaugă document</button>
+    </header>
+    {% if formular.non_form_errors %}<div class="alert alert--error">{{ formular.non_form_errors }}</div>{% endif %}
+    <div id="segment-list" class="segment-list">
+        {% for form in formular %}
+        <fieldset class="segment-row">
+            <legend>Document <span class="segment-number">{{ forloop.counter }}</span></legend>
+            <div class="form-grid">
+                <div><label for="{{ form.pagina_start.id_for_label }}">{{ form.pagina_start.label }}</label>{{ form.pagina_start }}{{ form.pagina_start.errors }}</div>
+                <div><label for="{{ form.pagina_sfarsit.id_for_label }}">{{ form.pagina_sfarsit.label }}</label>{{ form.pagina_sfarsit }}{{ form.pagina_sfarsit.errors }}</div>
+                <div><label for="{{ form.tip_document.id_for_label }}">{{ form.tip_document.label }}</label>{{ form.tip_document }}{{ form.tip_document.errors }}</div>
+                <div><label for="{{ form.directie.id_for_label }}">{{ form.directie.label }}</label>{{ form.directie }}{{ form.directie.errors }}</div>
+                <div class="form-grid__full"><label for="{{ form.cont_financiar.id_for_label }}">{{ form.cont_financiar.label }}</label>{{ form.cont_financiar }}{{ form.cont_financiar.errors }}<p class="helptext">Necesar numai pentru tipurile legate de un cont.</p></div>
+                <div class="form-grid__full"><label for="{{ form.observatii.id_for_label }}">{{ form.observatii.label }}</label>{{ form.observatii }}{{ form.observatii.errors }}</div>
+            </div>
+            <button class="btn btn--ghost btn--small remove-segment" type="button">Elimină acest document</button>
+        </fieldset>
+        {% endfor %}
+    </div>
+    <template id="empty-segment-template">
+        <fieldset class="segment-row">
+            <legend>Document <span class="segment-number">__number__</span></legend>
+            <div class="form-grid">
+                <div><label>De la pagina</label>{{ formular.empty_form.pagina_start }}</div>
+                <div><label>Până la pagina</label>{{ formular.empty_form.pagina_sfarsit }}</div>
+                <div><label>Tip document</label>{{ formular.empty_form.tip_document }}</div>
+                <div><label>Direcție</label>{{ formular.empty_form.directie }}</div>
+                <div class="form-grid__full"><label>Cont financiar</label>{{ formular.empty_form.cont_financiar }}</div>
+                <div class="form-grid__full"><label>Observații</label>{{ formular.empty_form.observatii }}</div>
+            </div>
+            <button class="btn btn--ghost btn--small remove-segment" type="button">Elimină acest document</button>
+        </fieldset>
+    </template>
+    <div class="form-actions"><button type="submit">Confirmă separarea și creează documentele</button><a class="btn btn--ghost" href="{% url 'coada_clasificare_inbox' %}">Renunță</a></div>
+</form>
+{% else %}
+<section class="panel"><div class="empty-state"><h2>Paginile nu sunt încă disponibile</h2>{% if analiza.status_citire == "eroare" %}<p class="text-danger">{{ analiza.eroare_citire }}</p>{% else %}<p>Citirea se desfășoară în fundal. Revino în câteva momente.</p>{% endif %}</div></section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+    const list = document.getElementById("segment-list");
+    const total = document.getElementById("id_segmente-TOTAL_FORMS");
+    const template = document.getElementById("empty-segment-template");
+    if (!list || !total || !template) return;
+    const renumber = () => {
+        [...list.querySelectorAll(".segment-row")].forEach((row, index) => {
+            row.querySelector(".segment-number").textContent = index + 1;
+            row.querySelectorAll("input, select, textarea").forEach((field) => {
+                field.name = field.name.replace(/segmente-\d+-/, `segmente-${index}-`);
+                field.id = field.id.replace(/id_segmente-\d+-/, `id_segmente-${index}-`);
+            });
+            row.querySelectorAll("label[for]").forEach((label) => {
+                label.htmlFor = label.htmlFor.replace(/id_segmente-\d+-/, `id_segmente-${index}-`);
+            });
+        });
+        total.value = list.querySelectorAll(".segment-row").length;
+    };
+    document.getElementById("add-segment").addEventListener("click", () => {
+        const index = Number(total.value);
+        list.insertAdjacentHTML("beforeend", template.innerHTML.replaceAll("__prefix__", index).replace("__number__", index + 1));
+        renumber();
+    });
+    list.addEventListener("click", (event) => {
+        if (!event.target.classList.contains("remove-segment")) return;
+        if (list.querySelectorAll(".segment-row").length === 1) return;
+        event.target.closest(".segment-row").remove();
+        renumber();
+    });
+})();
+</script>
+{% endblock %}

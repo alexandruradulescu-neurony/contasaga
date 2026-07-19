@@ -5,8 +5,19 @@ from django.db import connections
 from django.db.migrations.executor import MigrationExecutor
 from django.utils import timezone
 
-from documente.models import FisierDocument, FisierInbox, LotIncarcare
+from documente.analysis import LEASE_ANALIZA
+from documente.archive import LEASE_ARHIVA
+from documente.extraction import LEASE_EXTRAGERE
+from documente.models import (
+    AnalizaFisierInbox,
+    ArhivaLunara,
+    ExtractieStructurataDocument,
+    FisierDocument,
+    FisierInbox,
+    LotIncarcare,
+)
 from documente.processing import LEASE_PROCESARE
+from documente.reading import LEASE_CITIRE
 from documente.storage import get_document_storage
 from exporturi.models import Export
 from notificari.models import Notificare
@@ -141,6 +152,48 @@ class Command(BaseCommand):
                     expira_la__lte=timezone.now(),
                 )
                 .count(),
+                "citiri locale în așteptare": AnalizaFisierInbox.objects.using("privileged")
+                .filter(
+                    status_citire=AnalizaFisierInbox.StatusCitire.IN_ASTEPTARE,
+                    status_revizuire=AnalizaFisierInbox.StatusRevizuire.IN_ASTEPTARE,
+                )
+                .count(),
+                "citiri locale de reîncercat": AnalizaFisierInbox.objects.using("privileged")
+                .filter(
+                    status_citire=AnalizaFisierInbox.StatusCitire.EROARE,
+                    incercari_citire__lt=3,
+                    status_revizuire=AnalizaFisierInbox.StatusRevizuire.IN_ASTEPTARE,
+                )
+                .count(),
+                "citiri locale blocate": AnalizaFisierInbox.objects.using("privileged")
+                .filter(
+                    status_citire=AnalizaFisierInbox.StatusCitire.IN_LUCRU,
+                    citire_inceputa_la__lte=timezone.now() - LEASE_CITIRE,
+                    status_revizuire=AnalizaFisierInbox.StatusRevizuire.IN_ASTEPTARE,
+                )
+                .count(),
+                "citiri locale eșuate definitiv": AnalizaFisierInbox.objects.using("privileged")
+                .filter(
+                    status_citire=AnalizaFisierInbox.StatusCitire.EROARE,
+                    incercari_citire__gte=3,
+                    status_revizuire=AnalizaFisierInbox.StatusRevizuire.IN_ASTEPTARE,
+                )
+                .count(),
+                "arhive lunare în așteptare": ArhivaLunara.objects.using("privileged")
+                .filter(status=ArhivaLunara.Status.IN_ASTEPTARE)
+                .count(),
+                "arhive lunare de reîncercat": ArhivaLunara.objects.using("privileged")
+                .filter(status=ArhivaLunara.Status.EROARE, incercari__lt=3)
+                .count(),
+                "arhive lunare blocate": ArhivaLunara.objects.using("privileged")
+                .filter(
+                    status=ArhivaLunara.Status.IN_LUCRU,
+                    procesare_inceputa_la__lte=timezone.now() - LEASE_ARHIVA,
+                )
+                .count(),
+                "arhive lunare eșuate definitiv": ArhivaLunara.objects.using("privileged")
+                .filter(status=ArhivaLunara.Status.EROARE, incercari__gte=3)
+                .count(),
                 "exporturi în lucru": Export.objects.using("privileged")
                 .filter(status=Export.Status.IN_LUCRU)
                 .count(),
@@ -162,6 +215,86 @@ class Command(BaseCommand):
                 )
                 .count(),
             }
+            if settings.DOCUMENT_AI_ENABLED:
+                analiza_nevizuita = {
+                    "status_revizuire": AnalizaFisierInbox.StatusRevizuire.IN_ASTEPTARE
+                }
+                cozi.update(
+                    {
+                        "analize AI în așteptare": AnalizaFisierInbox.objects.using("privileged")
+                        .filter(
+                            status=AnalizaFisierInbox.Status.IN_ASTEPTARE,
+                            **analiza_nevizuita,
+                        )
+                        .count(),
+                        "analize AI de reîncercat": AnalizaFisierInbox.objects.using("privileged")
+                        .filter(
+                            status=AnalizaFisierInbox.Status.EROARE,
+                            incercari__lt=3,
+                            **analiza_nevizuita,
+                        )
+                        .count(),
+                        "analize AI blocate": AnalizaFisierInbox.objects.using("privileged")
+                        .filter(
+                            status=AnalizaFisierInbox.Status.IN_LUCRU,
+                            procesare_inceputa_la__lte=timezone.now() - LEASE_ANALIZA,
+                            **analiza_nevizuita,
+                        )
+                        .count(),
+                        "analize AI eșuate definitiv": AnalizaFisierInbox.objects.using(
+                            "privileged"
+                        )
+                        .filter(
+                            status=AnalizaFisierInbox.Status.EROARE,
+                            incercari__gte=3,
+                            **analiza_nevizuita,
+                        )
+                        .count(),
+                        "extrageri structurate în așteptare": (
+                            ExtractieStructurataDocument.objects.using("privileged")
+                            .filter(
+                                status=ExtractieStructurataDocument.Status.IN_ASTEPTARE,
+                                status_revizuire=(
+                                    ExtractieStructurataDocument.StatusRevizuire.IN_ASTEPTARE
+                                ),
+                            )
+                            .count()
+                        ),
+                        "extrageri structurate de reîncercat": (
+                            ExtractieStructurataDocument.objects.using("privileged")
+                            .filter(
+                                status=ExtractieStructurataDocument.Status.EROARE,
+                                incercari__lt=3,
+                                status_revizuire=(
+                                    ExtractieStructurataDocument.StatusRevizuire.IN_ASTEPTARE
+                                ),
+                            )
+                            .count()
+                        ),
+                        "extrageri structurate blocate": (
+                            ExtractieStructurataDocument.objects.using("privileged")
+                            .filter(
+                                status=ExtractieStructurataDocument.Status.IN_LUCRU,
+                                procesare_inceputa_la__lte=timezone.now() - LEASE_EXTRAGERE,
+                                status_revizuire=(
+                                    ExtractieStructurataDocument.StatusRevizuire.IN_ASTEPTARE
+                                ),
+                            )
+                            .count()
+                        ),
+                        "extrageri structurate eșuate definitiv": (
+                            ExtractieStructurataDocument.objects.using("privileged")
+                            .filter(
+                                status=ExtractieStructurataDocument.Status.EROARE,
+                                incercari__gte=3,
+                                status_revizuire=(
+                                    ExtractieStructurataDocument.StatusRevizuire.IN_ASTEPTARE
+                                ),
+                            )
+                            .count()
+                        ),
+                    }
+                )
             self.stdout.write("[INFO] Cozi: " + "; ".join(f"{k}={v}" for k, v in cozi.items()))
             inbox_business = {
                 "de clasificat": FisierInbox.objects.using("privileged")
@@ -170,10 +303,29 @@ class Command(BaseCommand):
                 "cu eroare păstrată în istoric": FisierInbox.objects.using("privileged")
                 .filter(status=FisierInbox.Status.EROARE)
                 .count(),
+                "ignorate auditat": FisierInbox.objects.using("privileged")
+                .filter(status=FisierInbox.Status.IGNORAT)
+                .count(),
                 "loturi deschise": LotIncarcare.objects.using("privileged")
                 .filter(status=LotIncarcare.Status.IN_DESFASURARE)
                 .count(),
             }
+            if not settings.DOCUMENT_AI_ENABLED:
+                inbox_business["analize neexecutate (AI dezactivat)"] = (
+                    AnalizaFisierInbox.objects.using("privileged")
+                    .filter(
+                        status=AnalizaFisierInbox.Status.IN_ASTEPTARE,
+                        status_revizuire=AnalizaFisierInbox.StatusRevizuire.IN_ASTEPTARE,
+                    )
+                    .count()
+                )
+                inbox_business["extrageri neexecutate (AI dezactivat)"] = (
+                    ExtractieStructurataDocument.objects.using("privileged")
+                    .filter(
+                        status_revizuire=(ExtractieStructurataDocument.StatusRevizuire.IN_ASTEPTARE)
+                    )
+                    .count()
+                )
             self.stdout.write(
                 "[INFO] Inbox business: " + "; ".join(f"{k}={v}" for k, v in inbox_business.items())
             )

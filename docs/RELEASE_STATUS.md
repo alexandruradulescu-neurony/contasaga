@@ -1,4 +1,4 @@
-# Release status — 18 iulie 2026
+# Release status — 19 iulie 2026
 
 ## Verdict curent
 
@@ -10,8 +10,8 @@ backup/restore și aprobările enumerate în `RELEASE_READINESS.md`.
 
 ## Dovezi automate
 
-- 107/107 teste Django/pytest pe ramura `dev`;
-- 94/94 verificări PostgreSQL/RLS pe topologia cu owner non-superuser;
+- 137/137 teste Django/pytest pe ramura `dev`;
+- 124/124 verificări PostgreSQL/RLS pe topologia cu owner non-superuser;
 - `ruff check` și `ruff format --check` fără erori;
 - nicio migrare model lipsă și nicio migrare neaplicată;
 - rolurile locale sunt corecte: `web_app` fără BYPASSRLS, `worker` cu
@@ -48,6 +48,9 @@ backup/restore și aprobările enumerate în `RELEASE_READINESS.md`.
 - sesiunile și cache-ul local nu au fost copiate, iar parolele demo trebuie
   schimbate înaintea folosirii cu date reale;
 - cronurile, workerul și Admin-ul privilegiat separat nu sunt încă pornite.
+- clasificarea/extragerea AI este dezactivată și nu există nicio cheie de
+  provider în Railway; release-ul live curent nu conține încă implementările
+  Phase 2–5 de pe `dev`.
 
 Auditul complet din 18 iulie a întărit autorizarea operațiilor privilegiate,
 izolarea destinatarilor notificărilor, concurența upload/procesare, recuperarea
@@ -69,6 +72,45 @@ curățare zilnică. Testele sintetice de browser au fost șterse după validare
 cozile locale au rămas curate. Schimbarea este în `main` și rulează pe instanța
 Railway live; migrarea `documente.0007_bulk_inbox`, noile tabele și endpointurile
 publice de health au fost verificate după deployment.
+
+Faza 2 este implementată și validată pe `dev`: coadă globală pentru contabili,
+clasificare manuală disponibilă indiferent de AI, adaptoare OpenAI și
+DeepSeek-compatible, rezultate structurate cu încredere/dovezi, lease și retry,
+confirmare/corectare/ignorare obligatoriu umană, audit și legătura dintre
+originalul inbox și documentul creat. Migrarea este
+`documente.0008_inbox_ai_analysis`. Funcția rămâne sigur dezactivată până la
+configurarea cheii și aprobarea porților AI din runbook; nu a fost încă
+promovată în `main` sau pe Railway.
+
+Faza 3 este implementată și validată local pe `dev`: text PDF per pagină, OCR
+Tesseract `ron+eng` pentru scanuri și imagini, preview-uri private, căutare în
+textul citit, sugestii conservative de limite, formular de separare cu
+acoperire completă obligatorie și derivări cu interval/checksum/actor. Migrarea
+este `documente.0009_ocr_and_document_boundaries`. Testul end-to-end local a
+citit un PDF de trei pagini, a propus corect intervalele 1–2 și 3–3 și a randat
+coada și ecranul de separare; datele sintetice au fost apoi eliminate. Faza 3
+nu este încă promovată în `main` sau Railway.
+
+Faza 4 este implementată și validată local pe `dev`: extracție structurată
+pentru părți/CUI, serie, număr, date, monedă și valori net/TVA/total,
+normalizare și avertismente pentru reguli de business, fingerprint al tuturor
+fișierelor sursă și precompletarea formularului. Acceptarea rămâne exclusiv o
+decizie a contabilului și salvează sugestiile, valorile finale, corecția,
+actorul și momentul. După epuizarea retry-urilor se continuă manual. Migrarea
+este `documente.0010_structured_extraction_and_monthly_archive`; faza nu face
+apeluri externe și nu creează joburi de extracție cât timp
+`DOCUMENT_AI_ENABLED=false`.
+
+Faza 5 este implementată și validată local pe `dev`: închiderea introduce
+starea blocată `inchidere_in_curs`, apoi workerul construiește o arhivă
+versionată și lizibilă pe disc, pe direcție și tip de document. Copiile de
+staging și finale sunt reverificate SHA-256, iar manifestul CSV este publicat
+ultimul. Perioada și documentele se închid/arhivează numai după commitul
+validat; lease-ul recuperează workerii întrerupți, iar trei eșecuri readuc luna
+auditat în `in_lucru`. Migrările sunt `perioade.0002_month_closure_state` și
+`documente.0010_structured_extraction_and_monthly_archive`. Un smoke test real
+pe storage local a verificat arhiva, manifestul și rollback-ul datelor
+sintetice. Faza nu este încă promovată în `main` sau Railway.
 
 ## Porți externe
 

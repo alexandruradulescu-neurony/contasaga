@@ -9,7 +9,6 @@ from core.models import AuditLog, IstoricStare
 from firme.models import Firma
 from notificari.services import (
     notifica_perioada_confirmata,
-    notifica_perioada_inchisa,
     notifica_toate_clarificarile_rezolvate,
 )
 
@@ -26,7 +25,7 @@ TRANZITII_PERIOADA = {
         "in_lucru": "documente_incomplete",
     },
     "clarificari_rezolvate": {"documente_incomplete": "in_lucru"},
-    "inchide": {"in_lucru": "inchisa"},
+    "inchide": {"in_lucru": "inchidere_in_curs"},
     "redeschide": {"inchisa": "in_lucru"},
 }
 
@@ -171,8 +170,13 @@ def actualizeaza_cerinta(
             .select_related("perioada_contabila")
             .get(pk=cerinta_id)
         )
-        if cerinta.perioada_contabila.stare == "inchisa":
-            raise TranzitieInvalida("Checklist-ul unei perioade închise este imuabil.")
+        if cerinta.perioada_contabila.stare in {
+            PerioadaContabila.Stare.INCHIDERE_IN_CURS,
+            PerioadaContabila.Stare.INCHISA,
+        }:
+            raise TranzitieInvalida(
+                "Checklist-ul nu poate fi modificat în timpul sau după închiderea perioadei."
+            )
         stare_veche = cerinta.status
         cerinta.status = status
         cerinta.numar_documente_declarat = numar_documente_declarat
@@ -333,6 +337,19 @@ def inchide_perioada(*, perioada_id, actor, context: ContextAudit):
         with connections["default"].cursor() as cursor:
             cursor.execute(
                 """
+                SELECT count(*) FROM fisiere_inbox
+                WHERE perioada_contabila_id = %s
+                  AND status IN ('in_asteptare', 'disponibil')
+                """,
+                [perioada.pk],
+            )
+            if cursor.fetchone()[0]:
+                raise TranzitieInvalida(
+                    "Clasifică sau ignoră fișierele rămase în inbox înainte de "
+                    "închiderea dosarului."
+                )
+            cursor.execute(
+                """
                 SELECT count(*) FROM documente
                 WHERE perioada_contabila_id = %s
                   AND stare NOT IN ('procesat', 'anulat', 'arhivat')
@@ -342,24 +359,56 @@ def inchide_perioada(*, perioada_id, actor, context: ContextAudit):
             )
             if cursor.fetchone()[0]:
                 raise TranzitieInvalida("Există documente care nu au fost procesate sau anulate.")
-        from documente.services import arhiveaza_documente_perioada
-
-        arhiveaza_documente_perioada(perioada=perioada, actor=actor, context=context)
-        perioada.inchisa_la = timezone.now()
-        perioada.inchisa_de_id = actor.pk
-        perioada.save(update_fields=["inchisa_la", "inchisa_de"])
-        istoric = _schimba_starea(
+        _schimba_starea(
             perioada=perioada,
             actor=actor,
             stare_noua=stare_noua,
-            actiune="perioada_inchisa",
+            actiune="inchidere_programata",
             context=context,
+            comentariu="Arhiva lunară a intrat în coada de finalizare.",
         )
-        notifica_perioada_inchisa(
-            perioada=perioada,
-            actor=actor,
-            eveniment_id=istoric.pk,
-        )
+    from documente.archive import programeaza_arhiva_lunara
+
+    def programeaza_dupa_commit():
+        try:
+            programeaza_arhiva_lunara(
+                perioada=perioada,
+                actor=actor,
+                context=context,
+            )
+        # This is a post-commit boundary: any scheduling failure must make the
+        # period editable again instead of leaving it indefinitely locked.
+        except Exception as exc:
+            with transaction.atomic(using="privileged"):
+                perioada_blocata = (
+                    PerioadaContabila.objects.using("privileged")
+                    .select_for_update(of=("self",))
+                    .get(pk=perioada_id)
+                )
+                if perioada_blocata.stare == PerioadaContabila.Stare.INCHIDERE_IN_CURS:
+                    perioada_blocata.stare = PerioadaContabila.Stare.IN_LUCRU
+                    perioada_blocata.save(using="privileged", update_fields=["stare"])
+                    IstoricStare.objects.using("privileged").create(
+                        firma_id=perioada_blocata.firma_id,
+                        entitate_tip="perioada",
+                        entitate_id=perioada_blocata.pk,
+                        stare_veche=PerioadaContabila.Stare.INCHIDERE_IN_CURS,
+                        stare_noua=PerioadaContabila.Stare.IN_LUCRU,
+                        utilizator_id=actor.pk,
+                        comentariu=f"Programarea arhivei a eșuat: {str(exc)[:500]}",
+                    )
+                    AuditLog.objects.using("privileged").create(
+                        firma_id=perioada_blocata.firma_id,
+                        utilizator_id=actor.pk,
+                        entitate_tip="perioada",
+                        entitate_id=perioada_blocata.pk,
+                        actiune="programare_inchidere_esuata",
+                        date_noi={"eroare": str(exc)[:500]},
+                        ip_address=context.ip_address,
+                        user_agent=(context.user_agent or "")[:255] or None,
+                    )
+
+    transaction.on_commit(programeaza_dupa_commit, using="default", robust=True)
     return perioada
 
 

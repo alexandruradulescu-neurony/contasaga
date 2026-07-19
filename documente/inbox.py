@@ -141,7 +141,10 @@ def creeaza_lot_incarcare(
 
     with transaction.atomic(using="default"):
         perioada = PerioadaContabila.objects.select_for_update().get(pk=perioada_id)
-        if perioada.stare == PerioadaContabila.Stare.INCHISA:
+        if perioada.stare in {
+            PerioadaContabila.Stare.INCHIDERE_IN_CURS,
+            PerioadaContabila.Stare.INCHISA,
+        }:
             raise EroareInbox("Nu poți încărca într-o perioadă închisă.")
         lot = LotIncarcare.objects.create(
             firma_id=perioada.firma_id,
@@ -201,7 +204,10 @@ def initiaza_fisier_inbox(
             raise PermissionDenied
         if lot.status != LotIncarcare.Status.IN_DESFASURARE:
             raise EroareInbox("Lotul nu mai acceptă fișiere.")
-        if perioada.stare == PerioadaContabila.Stare.INCHISA:
+        if perioada.stare in {
+            PerioadaContabila.Stare.INCHIDERE_IN_CURS,
+            PerioadaContabila.Stare.INCHISA,
+        }:
             raise EroareInbox("Perioada este închisă.")
         fisiere = FisierInbox.objects.filter(lot_id=lot.pk)
         if fisiere.count() >= lot.numar_fisiere_declarat:
@@ -362,7 +368,10 @@ def finalizeaza_fisier_inbox(*, fisier_id, actor, context) -> FisierInbox:
                     raise EroareInbox("Fișierul nu mai poate fi finalizat.")
                 if lot.status != LotIncarcare.Status.IN_DESFASURARE:
                     raise EroareInbox("Lotul nu mai acceptă finalizări.")
-                if perioada.stare == PerioadaContabila.Stare.INCHISA:
+                if perioada.stare in {
+                    PerioadaContabila.Stare.INCHIDERE_IN_CURS,
+                    PerioadaContabila.Stare.INCHISA,
+                }:
                     raise EroareInbox("Perioada este închisă.")
                 if fisier.expira_la <= timezone.now():
                     raise EroareInbox("Adresa de încărcare a expirat.")

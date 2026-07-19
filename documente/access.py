@@ -5,7 +5,7 @@ from django.core import signing
 from django.urls import reverse
 from django.utils.http import content_disposition_header
 
-from .models import FisierDocument, FisierInbox
+from .models import FisierDocument, FisierInbox, PaginaFisierInbox
 from .storage import EroareStorage, get_document_storage
 
 SALT_ACCES_LOCAL = "documente.acces-local.v1"
@@ -59,6 +59,7 @@ def url_acces_fisier_inbox(*, request, fisier: FisierInbox) -> str:
         not in {
             FisierInbox.Status.DISPONIBIL,
             FisierInbox.Status.CLASIFICAT,
+            FisierInbox.Status.IGNORAT,
         }
         or not fisier.storage_key
     ):
@@ -77,6 +78,31 @@ def url_acces_fisier_inbox(*, request, fisier: FisierInbox) -> str:
         {
             "storage_key": fisier.storage_key,
             "content_type": content_type,
+            "content_disposition": content_disposition,
+        },
+        salt=SALT_ACCES_LOCAL,
+        compress=True,
+    )
+    cale = reverse("fisier_local_semnat")
+    return request.build_absolute_uri(f"{cale}?token={token}")
+
+
+def url_acces_pagina_inbox(*, request, pagina: PaginaFisierInbox) -> str:
+    storage = get_document_storage()
+    content_disposition = _dispozitie(
+        descarcare=False,
+        nume=f"pagina-{pagina.numar_pagina:03d}.png",
+    )
+    if not storage.is_local:
+        return storage.presigned_get_url(
+            pagina.preview_storage_key,
+            content_type="image/png",
+            content_disposition=content_disposition,
+        )
+    token = signing.dumps(
+        {
+            "storage_key": pagina.preview_storage_key,
+            "content_type": "image/png",
             "content_disposition": content_disposition,
         },
         salt=SALT_ACCES_LOCAL,
